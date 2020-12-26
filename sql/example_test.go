@@ -6,9 +6,9 @@ package sql_test
 
 import (
 	"context"
-	"../sql"
 	"fmt"
 	"log"
+	"memsql-conn-pool/sql"
 	"strings"
 	"time"
 )

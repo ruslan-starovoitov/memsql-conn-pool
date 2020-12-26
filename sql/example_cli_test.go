@@ -5,10 +5,10 @@
 package sql_test
 
 import (
-	"../sql"
 	"context"
 	"flag"
 	"log"
+	"memsql-conn-pool/sql"
 	"os"
 	"os/signal"
 	"time"

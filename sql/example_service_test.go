@@ -6,11 +6,11 @@ package sql_test
 
 import (
 	"context"
-	"../sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"memsql-conn-pool/sql"
 	"net/http"
 	"time"
 )

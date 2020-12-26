@@ -17,10 +17,10 @@ package sql
 
 import (
 	"context"
-	"../driver"
 	"errors"
 	"fmt"
 	"io"
+	"memsql-conn-pool/driver"
 	"reflect"
 	"runtime"
 	"sort"

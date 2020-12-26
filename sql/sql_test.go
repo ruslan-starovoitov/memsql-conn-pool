@@ -6,10 +6,10 @@ package sql
 
 import (
 	"context"
-	"../driver"
 	"errors"
 	"fmt"
 	"math/rand"
+	"memsql-conn-pool/driver"
 	"reflect"
 	"runtime"
 	"strings"

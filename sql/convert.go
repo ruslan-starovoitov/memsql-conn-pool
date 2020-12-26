@@ -7,9 +7,9 @@
 package sql
 
 import (
-	"../driver"
 	"errors"
 	"fmt"
+	"memsql-conn-pool/driver"
 	"reflect"
 	"strconv"
 	"time"

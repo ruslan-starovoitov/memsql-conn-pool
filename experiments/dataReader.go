@@ -7,24 +7,23 @@ import (
 )
 
 type dataReader struct {
-
 }
 
-func (dr*dataReader)readTest(db*sql.DB) error{
+func (dr *dataReader) readTest(db *sql.DB) error {
 
 	rows, err := db.Query("select * from test")
-	if err != nil{
+	if err != nil {
 		return err
 	}
 
-	count:=0
-	for rows.Next(){
+	count := 0
+	for rows.Next() {
 		var message string
-		if err = rows.Scan(&message); err==nil{
+		if err = rows.Scan(&message); err == nil {
 			count++
 			//fmt.Println(strconv.Itoa(count)+" "+message)
 		}
-		if count%100==0{
+		if count%100 == 0 {
 			fmt.Println()
 			PrintMemUsage()
 		}

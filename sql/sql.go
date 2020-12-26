@@ -447,6 +447,10 @@ const (
 	// for one to become available (if MaxOpenConns has been reached) or
 	// creates a new database connection.
 	cachedOrNewConn
+	// newOrCached creates a new connection, if avaliable,
+	// else	return a cached connection
+	// else waits for one to become avaliable (if MaxOpenConns has been reached)
+	newOrCached
 )
 
 // driverConn wraps a driver.Conn with a mutex, to
@@ -1208,33 +1212,34 @@ func (db *DB) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn
 	}
 	lifetime := db.maxLifetime
 
+	//ignore this strategy
 	// Prefer a free connection, if possible.
-	numFree := len(db.freeConn)
-	if strategy == cachedOrNewConn && numFree > 0 {
-		conn := db.freeConn[0]
-		copy(db.freeConn, db.freeConn[1:])
-		db.freeConn = db.freeConn[:numFree-1]
-		conn.inUse = true
-		if conn.expired(lifetime) {
-			db.maxLifetimeClosed++
-			db.mu.Unlock()
-			conn.Close()
-			return nil, driver.ErrBadConn
-		}
-		db.mu.Unlock()
-
-		// Reset the session if required.
-		if err := conn.resetSession(ctx); err == driver.ErrBadConn {
-			conn.Close()
-			return nil, driver.ErrBadConn
-		}
-
-		return conn, nil
-	}
+	//numFree := len(db.freeConn)
+	//if strategy == cachedOrNewConn && numFree > 0 {
+	//	conn := db.freeConn[0]
+	//	copy(db.freeConn, db.freeConn[1:])
+	//	db.freeConn = db.freeConn[:numFree-1]
+	//	conn.inUse = true
+	//	if conn.expired(lifetime) {
+	//		db.maxLifetimeClosed++
+	//		db.mu.Unlock()
+	//		conn.Close()
+	//		return nil, driver.ErrBadConn
+	//	}
+	//	db.mu.Unlock()
+	//
+	//	// Reset the session if required.
+	//	if err := conn.resetSession(ctx); err == driver.ErrBadConn {
+	//		conn.Close()
+	//		return nil, driver.ErrBadConn
+	//	}
+	//
+	//	return conn, nil
+	//}
 
 	// Out of free connections or we were asked not to use one. If we're not
 	// allowed to open any more connections, make a request and wait.
-	if db.maxOpen > 0 && db.numOpen >= db.maxOpen {
+	if db.maxOpen > 0 && db.maxOpen <= db.numOpen {
 		// Make the connRequest channel. It's buffered so that the
 		// connectionOpener doesn't block while waiting for the req to be read.
 		req := make(chan connRequest, 1)
@@ -1601,15 +1606,24 @@ func (db *DB) execDC(ctx context.Context, dc *driverConn, release func(error), q
 func (db *DB) QueryContext(ctx context.Context, query string, args ...interface{}) (*Rows, error) {
 	var rows *Rows
 	var err error
+	//TODO choose a connection resuse strategy
+	//for i := 0; i < maxBadConnRetries; i++ {
+	//	rows, err = db.query(ctx, query, args, cachedOrNewConn)
+	//	if err != driver.ErrBadConn {
+	//		break
+	//	}
+	//}
+	//if err == driver.ErrBadConn {
+	//	return db.query(ctx, query, args, alwaysNewConn)
+	//}
+
 	for i := 0; i < maxBadConnRetries; i++ {
-		rows, err = db.query(ctx, query, args, cachedOrNewConn)
+		rows, err = db.query(ctx, query, args, newOrCached)
 		if err != driver.ErrBadConn {
 			break
 		}
 	}
-	if err == driver.ErrBadConn {
-		return db.query(ctx, query, args, alwaysNewConn)
-	}
+
 	return rows, err
 }
 

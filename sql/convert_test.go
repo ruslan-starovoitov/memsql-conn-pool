@@ -7,6 +7,7 @@ package sql
 import (
 	"fmt"
 	"memsql-conn-pool/driver"
+	"memsql-conn-pool/sql/namedArg.go"
 	"reflect"
 	"runtime"
 	"strings"
@@ -483,7 +484,7 @@ func TestDriverArgs(t *testing.T) {
 		},
 	}
 	for i, tt := range tests {
-		ds := &driverStmt{Locker: &sync.Mutex{}, si: stubDriverStmt{nil}}
+		ds := &namedArg_go.driverStmt{Locker: &sync.Mutex{}, si: stubDriverStmt{nil}}
 		got, err := driverArgsConnLocked(nil, ds, tt.args)
 		if err != nil {
 			t.Errorf("test[%d]: %v", i, err)

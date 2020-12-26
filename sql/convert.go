@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"memsql-conn-pool/driver"
+	"memsql-conn-pool/sql/namedArg.go"
 	"reflect"
 	"strconv"
 	"time"
@@ -104,7 +105,7 @@ func defaultCheckNamedValue(nv *driver.NamedValue) (err error) {
 // The statement ds may be nil, if no statement is available.
 //
 // ci must be locked.
-func driverArgsConnLocked(ci driver.Conn, ds *driverStmt, args []interface{}) ([]driver.NamedValue, error) {
+func driverArgsConnLocked(ci driver.Conn, ds *namedArg_go.driverStmt, args []interface{}) ([]driver.NamedValue, error) {
 	nvargs := make([]driver.NamedValue, len(args))
 
 	// -1 means the driver doesn't know how to count the number of

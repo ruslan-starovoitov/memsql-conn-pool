@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"memsql-conn-pool/driver"
+	"memsql-conn-pool/sql/namedArg.go"
 	"reflect"
 	"sort"
 	"strconv"
@@ -206,7 +207,7 @@ type Dummy struct {
 }
 
 func TestDrivers(t *testing.T) {
-	unregisterAllDrivers()
+	namedArg_go.unregisterAllDrivers()
 	Register("test", fdriver)
 	Register("invalid", Dummy{})
 	all := Drivers()

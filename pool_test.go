@@ -2,10 +2,10 @@ package memsql_conn_pool
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	_ "memsql-conn-pool/mysql"
+	"memsql-conn-pool/sql"
 	"testing"
 	"time"
 )
@@ -27,30 +27,30 @@ import (
 //	}
 //}
 
-func Helper(doneChan<-chan struct{}){
+func Helper(doneChan <-chan struct{}) {
 	select {
-		case <-doneChan:
-			fmt.Println("Done in helper method")
+	case <-doneChan:
+		fmt.Println("Done in helper method")
 	}
 }
 func TestConnectionClosing(t *testing.T) {
 	cr := Credentials{Database: "hellomemsql", Username: "root", Password: "RootPass1"}
-	connString := cr.Username +":"+cr.Password +"@/"+cr.Database
+	connString := cr.Username + ":" + cr.Password + "@/" + cr.Database
 	db, err := sql.Open("mysql", connString)
 	assert.NoError(t, err)
-	connContext:= context.Background()
+	connContext := context.Background()
 	go Helper(connContext.Done())
 	connetion, err := db.Conn(connContext)
 	assert.NoError(t, err)
-	err=connetion.PingContext(context.Background())
+	err = connetion.PingContext(context.Background())
 	assert.NoError(t, err)
-	err=connetion.Close()
+	err = connetion.Close()
 
 	assert.NoError(t, err)
-	select{
-		case <-connContext.Done():
-			fmt.Println("success")
-		case <-time.After(time.Second):
-			t.Error("timeout error")
+	select {
+	case <-connContext.Done():
+		fmt.Println("success")
+	case <-time.After(time.Second):
+		t.Error("timeout error")
 	}
 }

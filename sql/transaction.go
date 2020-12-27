@@ -19,7 +19,7 @@ import (
 // the transaction's Prepare or Stmt methods are closed
 // by the call to Commit or Rollback.
 type Tx struct {
-	db *DB
+	db *ConnPool
 
 	// closemu prevents the transaction from closing while there
 	// is an active query. It is held for read during queries

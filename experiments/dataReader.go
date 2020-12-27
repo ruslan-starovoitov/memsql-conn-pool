@@ -9,7 +9,7 @@ import (
 type dataReader struct {
 }
 
-func (dr *dataReader) readTest(db *sql.DB) error {
+func (dr *dataReader) readTest(db *sql.ConnPool) error {
 
 	rows, err := db.Query("select * from test")
 	if err != nil {

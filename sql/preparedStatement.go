@@ -14,14 +14,14 @@ import (
 // If a Stmt is prepared on a Tx or Conn, it will be bound to a single
 // underlying connection forever. If the Tx or Conn closes, the Stmt will
 // become unusable and all operations will return an error.
-// If a Stmt is prepared on a DB, it will remain usable for the lifetime of the
-// DB. When the Stmt needs to execute on a new underlying connection, it will
+// If a Stmt is prepared on a ConnPool, it will remain usable for the lifetime of the
+// ConnPool. When the Stmt needs to execute on a new underlying connection, it will
 // prepare itself on the new connection automatically.
 type Stmt struct {
 	// Immutable:
-	db        *DB    // where we came from
-	query     string // that created the Stmt
-	stickyErr error  // if non-nil, this error is returned for all operations
+	db        *ConnPool // where we came from
+	query     string    // that created the Stmt
+	stickyErr error     // if non-nil, this error is returned for all operations
 
 	closemu sync.RWMutex // held exclusively during close, for read otherwise.
 
@@ -108,7 +108,7 @@ func resultFromStatement(ctx context.Context, ci driver.Conn, ds *driverStmt, ar
 
 // removeClosedStmtLocked removes closed conns in s.css.
 //
-// To avoid lock contention on DB.mu, we do it only when
+// To avoid lock contention on ConnPool.mu, we do it only when
 // s.db.numClosed - s.lastNum is large enough.
 func (s *Stmt) removeClosedStmtLocked() {
 	t := len(s.css)/2 + 1

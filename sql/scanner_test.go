@@ -22,7 +22,7 @@ import (
 
 func init() {
 	type dbConn struct {
-		db *DB
+		db *ConnPool
 		c  *namedArg_go.driverConn
 	}
 	freedFrom := make(map[dbConn]string)
@@ -37,7 +37,7 @@ func init() {
 		defer mu.Unlock()
 		freedFrom[c] = s
 	}
-	namedArg_go.putConnHook = func(db *DB, c *namedArg_go.driverConn) {
+	namedArg_go.putConnHook = func(db *ConnPool, c *namedArg_go.driverConn) {
 		idx := -1
 		for i, v := range db.freeConn {
 			if v == c {
@@ -60,11 +60,11 @@ const fakeDBName = "foo"
 
 var chrisBirthday = time.Unix(123456789, 0)
 
-func newTestDB(t testing.TB, name string) *DB {
+func newTestDB(t testing.TB, name string) *ConnPool {
 	return newTestDBConnector(t, &fakeConnector{name: fakeDBName}, name)
 }
 
-func newTestDBConnector(t testing.TB, fc *fakeConnector, name string) *DB {
+func newTestDBConnector(t testing.TB, fc *fakeConnector, name string) *ConnPool {
 	fc.name = fakeDBName
 	db := OpenDB(fc)
 	if _, err := db.Exec("WIPE"); err != nil {
@@ -136,7 +136,7 @@ func TestDriverPanic(t *testing.T) {
 	exec(t, db, "WIPE")                            // check not deadlocked
 }
 
-func exec(t testing.TB, db *DB, query string, args ...interface{}) {
+func exec(t testing.TB, db *ConnPool, query string, args ...interface{}) {
 	t.Helper()
 	_, err := db.Exec(query, args...)
 	if err != nil {
@@ -144,7 +144,7 @@ func exec(t testing.TB, db *DB, query string, args ...interface{}) {
 	}
 }
 
-func closeDB(t testing.TB, db *DB) {
+func closeDB(t testing.TB, db *ConnPool) {
 	if e := recover(); e != nil {
 		fmt.Printf("Panic: %v\n", e)
 		panic(e)
@@ -170,7 +170,7 @@ func closeDB(t testing.TB, db *DB) {
 
 	err := db.Close()
 	if err != nil {
-		t.Fatalf("error closing DB: %v", err)
+		t.Fatalf("error closing ConnPool: %v", err)
 	}
 
 	var numOpen int
@@ -178,13 +178,13 @@ func closeDB(t testing.TB, db *DB) {
 		numOpen = db.numOpenConns()
 		return numOpen == 0
 	}) {
-		t.Fatalf("%d connections still open after closing DB", numOpen)
+		t.Fatalf("%d connections still open after closing ConnPool", numOpen)
 	}
 }
 
 // numPrepares assumes that db has exactly 1 idle conn and returns
 // its count of calls to Prepare
-func numPrepares(t *testing.T, db *DB) int {
+func numPrepares(t *testing.T, db *ConnPool) int {
 	if n := len(db.freeConn); n != 1 {
 		t.Fatalf("free conns = %d; want 1", n)
 	}
@@ -376,7 +376,7 @@ func waitCondition(waitFor, checkEvery time.Duration, fn func() bool) bool {
 
 // waitForFree checks db.numFreeConns until either it equals want or
 // the maxWait time elapses.
-func waitForFree(t *testing.T, db *DB, maxWait time.Duration, want int) {
+func waitForFree(t *testing.T, db *ConnPool, maxWait time.Duration, want int) {
 	var numFree int
 	if !waitCondition(maxWait, 5*time.Millisecond, func() bool {
 		numFree = db.numFreeConns()
@@ -2181,7 +2181,7 @@ func TestMaxOpenConnsOnBusy(t *testing.T) {
 }
 
 // Issue 10886: tests that all connection attempts return when more than
-// DB.maxOpen connections are in flight and the first DB.maxOpen fail.
+// ConnPool.maxOpen connections are in flight and the first ConnPool.maxOpen fail.
 func TestPendingConnsAfterErr(t *testing.T) {
 	const (
 		maxOpen = 2
@@ -2498,7 +2498,7 @@ func TestCloseConnBeforeStmts(t *testing.T) {
 		if err != nil {
 			t.Errorf("Error closing fakeConn: %v; from %s", err, namedArg_go.stack())
 			db.dumpDeps(t)
-			t.Errorf("DB = %#v", db)
+			t.Errorf("ConnPool = %#v", db)
 		}
 	})
 
@@ -2607,7 +2607,7 @@ func TestStmtCloseOrder(t *testing.T) {
 // Test cases where there's more than maxBadConnRetries bad connections in the
 // pool (issue 8834)
 func TestManyErrBadConn(t *testing.T) {
-	manyErrBadConnSetup := func(first ...func(db *DB)) *DB {
+	manyErrBadConnSetup := func(first ...func(db *ConnPool)) *ConnPool {
 		db := newTestDB(t, "people")
 
 		for _, f := range first {
@@ -2685,7 +2685,7 @@ func TestManyErrBadConn(t *testing.T) {
 	}
 
 	// Stmt.Exec
-	db = manyErrBadConnSetup(func(db *DB) {
+	db = manyErrBadConnSetup(func(db *ConnPool) {
 		stmt, err = db.Prepare("INSERT|people|name=Julia,age=19")
 		if err != nil {
 			t.Fatal(err)
@@ -2701,7 +2701,7 @@ func TestManyErrBadConn(t *testing.T) {
 	}
 
 	// Stmt.Query
-	db = manyErrBadConnSetup(func(db *DB) {
+	db = manyErrBadConnSetup(func(db *ConnPool) {
 		stmt, err = db.Prepare("SELECT|people|age,name|")
 		if err != nil {
 			t.Fatal(err)
@@ -3181,16 +3181,16 @@ func TestTxEndBadConn(t *testing.T) {
 }
 
 type concurrentTest interface {
-	init(t testing.TB, db *DB)
+	init(t testing.TB, db *ConnPool)
 	finish(t testing.TB)
 	test(t testing.TB) error
 }
 
 type concurrentDBQueryTest struct {
-	db *DB
+	db *ConnPool
 }
 
-func (c *concurrentDBQueryTest) init(t testing.TB, db *DB) {
+func (c *concurrentDBQueryTest) init(t testing.TB, db *ConnPool) {
 	c.db = db
 }
 
@@ -3213,10 +3213,10 @@ func (c *concurrentDBQueryTest) test(t testing.TB) error {
 }
 
 type concurrentDBExecTest struct {
-	db *DB
+	db *ConnPool
 }
 
-func (c *concurrentDBExecTest) init(t testing.TB, db *DB) {
+func (c *concurrentDBExecTest) init(t testing.TB, db *ConnPool) {
 	c.db = db
 }
 
@@ -3234,11 +3234,11 @@ func (c *concurrentDBExecTest) test(t testing.TB) error {
 }
 
 type concurrentStmtQueryTest struct {
-	db   *DB
+	db   *ConnPool
 	stmt *Stmt
 }
 
-func (c *concurrentStmtQueryTest) init(t testing.TB, db *DB) {
+func (c *concurrentStmtQueryTest) init(t testing.TB, db *ConnPool) {
 	c.db = db
 	var err error
 	c.stmt, err = db.Prepare("SELECT|people|name|")
@@ -3271,11 +3271,11 @@ func (c *concurrentStmtQueryTest) test(t testing.TB) error {
 }
 
 type concurrentStmtExecTest struct {
-	db   *DB
+	db   *ConnPool
 	stmt *Stmt
 }
 
-func (c *concurrentStmtExecTest) init(t testing.TB, db *DB) {
+func (c *concurrentStmtExecTest) init(t testing.TB, db *ConnPool) {
 	c.db = db
 	var err error
 	c.stmt, err = db.Prepare("NOSERT|people|name=Chris,age=?,photo=CPHOTO,bdate=?")
@@ -3302,11 +3302,11 @@ func (c *concurrentStmtExecTest) test(t testing.TB) error {
 }
 
 type concurrentTxQueryTest struct {
-	db *DB
+	db *ConnPool
 	tx *Tx
 }
 
-func (c *concurrentTxQueryTest) init(t testing.TB, db *DB) {
+func (c *concurrentTxQueryTest) init(t testing.TB, db *ConnPool) {
 	c.db = db
 	var err error
 	c.tx, err = c.db.Begin()
@@ -3338,11 +3338,11 @@ func (c *concurrentTxQueryTest) test(t testing.TB) error {
 }
 
 type concurrentTxExecTest struct {
-	db *DB
+	db *ConnPool
 	tx *Tx
 }
 
-func (c *concurrentTxExecTest) init(t testing.TB, db *DB) {
+func (c *concurrentTxExecTest) init(t testing.TB, db *ConnPool) {
 	c.db = db
 	var err error
 	c.tx, err = c.db.Begin()
@@ -3369,12 +3369,12 @@ func (c *concurrentTxExecTest) test(t testing.TB) error {
 }
 
 type concurrentTxStmtQueryTest struct {
-	db   *DB
+	db   *ConnPool
 	tx   *Tx
 	stmt *Stmt
 }
 
-func (c *concurrentTxStmtQueryTest) init(t testing.TB, db *DB) {
+func (c *concurrentTxStmtQueryTest) init(t testing.TB, db *ConnPool) {
 	c.db = db
 	var err error
 	c.tx, err = c.db.Begin()
@@ -3415,12 +3415,12 @@ func (c *concurrentTxStmtQueryTest) test(t testing.TB) error {
 }
 
 type concurrentTxStmtExecTest struct {
-	db   *DB
+	db   *ConnPool
 	tx   *Tx
 	stmt *Stmt
 }
 
-func (c *concurrentTxStmtExecTest) init(t testing.TB, db *DB) {
+func (c *concurrentTxStmtExecTest) init(t testing.TB, db *ConnPool) {
 	c.db = db
 	var err error
 	c.tx, err = c.db.Begin()
@@ -3458,7 +3458,7 @@ type concurrentRandomTest struct {
 	tests []concurrentTest
 }
 
-func (c *concurrentRandomTest) init(t testing.TB, db *DB) {
+func (c *concurrentRandomTest) init(t testing.TB, db *ConnPool) {
 	c.tests = []concurrentTest{
 		new(concurrentDBQueryTest),
 		new(concurrentDBExecTest),
@@ -3774,7 +3774,7 @@ func TestConnectionLeak(t *testing.T) {
 	defer closeDB(t, db)
 	// Start by opening defaultMaxIdleConns
 	rows := make([]*Rows, namedArg_go.defaultMaxIdleConns)
-	// We need to SetMaxOpenConns > MaxIdleConns, so the DB can open
+	// We need to SetMaxOpenConns > MaxIdleConns, so the ConnPool can open
 	// a new connection and we can fill the idle queue with the released
 	// connections.
 	db.SetMaxOpenConns(len(rows) + 1)
@@ -3791,7 +3791,7 @@ func TestConnectionLeak(t *testing.T) {
 	}
 	// Now we have defaultMaxIdleConns busy connections. Open
 	// a new one, but wait until the busy connections are released
-	// before returning control to DB.
+	// before returning control to ConnPool.
 	drv := db.Driver().(*fakeDriver)
 	drv.waitCh = make(chan struct{}, 1)
 	drv.waitingCh = make(chan struct{}, 1)
@@ -3813,9 +3813,9 @@ func TestConnectionLeak(t *testing.T) {
 	for _, v := range rows {
 		v.Close()
 	}
-	// At this point we give the new connection to DB. This connection is
+	// At this point we give the new connection to ConnPool. This connection is
 	// now useless, since the idle queue is full and there are no pending
-	// requests. DB should deal with this situation without leaking the
+	// requests. ConnPool should deal with this situation without leaking the
 	// connection.
 	drv.waitCh <- struct{}{}
 	wg.Wait()

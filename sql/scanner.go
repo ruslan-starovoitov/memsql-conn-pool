@@ -67,7 +67,7 @@ func Drivers() []string {
 	return list
 }
 
-// TxOptions holds the transaction options to be used in DB.BeginTx.
+// TxOptions holds the transaction options to be used in ConnPool.BeginTx.
 type TxOptions struct {
 	// Isolation is the transaction isolation level.
 	// If zero, the driver or database's default level is used.

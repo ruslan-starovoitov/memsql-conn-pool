@@ -2,13 +2,14 @@ package memsql_conn_pool
 
 import (
 	"context"
-	"memsql-conn-pool/sql"
+	cmap "github.com/orcaman/concurrent-map"
+	_ "memsql-conn-pool/mysql"
 	"time"
 )
 
 func NewPool(connectionLimit int, idleTimeout time.Duration) *PoolManager {
 	pw := PoolManager{
-		pools:        make(map[Credentials]*sql.DB),
+		pools:        cmap.New(),
 		totalMax:     connectionLimit,
 		idleTimeout:  idleTimeout,
 		releasedChan: make(chan struct{}),

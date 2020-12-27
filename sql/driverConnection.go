@@ -14,7 +14,7 @@ import (
 // interfaces returned via that Conn, such as calls on Tx, Stmt,
 // Result, Rows)
 type driverConn struct {
-	db        *DB
+	db        *ConnPool
 	createdAt time.Time
 
 	sync.Mutex  // guards following

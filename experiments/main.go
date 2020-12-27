@@ -32,7 +32,7 @@ func run() error {
 	return nil
 }
 
-func createConnectionPool() (*sql.DB, error) {
+func createConnectionPool() (*sql.ConnPool, error) {
 	db, err := sql.Open("mysql", "root:RootPass1@/hellomemsql?interpolateParams=true")
 	if err != nil {
 		return nil, err
@@ -41,22 +41,22 @@ func createConnectionPool() (*sql.DB, error) {
 	return db, err
 }
 
-func truncateTable(db *sql.DB) error {
+func truncateTable(db *sql.ConnPool) error {
 	_, err := db.Exec("truncate table test;")
 	return err
 }
 
-func fillData(db *sql.DB) error {
+func fillData(db *sql.ConnPool) error {
 	df := dataFiller{}
 	return df.FillData(db)
 }
 
-func readData(db *sql.DB) error {
+func readData(db *sql.ConnPool) error {
 	dr := dataReader{}
 	return dr.readTest(db)
 }
 
-//func runPreparedStatement(db *sql.DB) error {
+//func runPreparedStatement(db *sql.ConnPool) error {
 //	ps:=prepareStatement{}
 //	return ps.FillData(db)
 //}

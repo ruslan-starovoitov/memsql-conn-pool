@@ -6,31 +6,34 @@ import (
 	"time"
 )
 
-func main(){
-	err:=run()
-	if err!=nil{
+func main() {
+	err := run()
+	if err != nil {
 		panic(err)
 	}
 }
 
-func run()error{
+var credentials = pool.Credentials{
+	Username: "root",
+	Password: "RootPass1",
+	Database: "hellomemsql",
+}
+
+func run() error {
 	connPool := pool.NewPool(100, time.Minute)
-	credentials:=pool.Credentials{
-		Username: "root",
-		Password: "RootPass1",
-		Database: "hellomemsql",
-	}
-	rows, err:=connPool.Query(credentials, "select count(*) from test")
-	if err!=nil{
+	rows, err := connPool.Query(credentials, "select count(*) from test")
+	if err != nil {
 		return err
 	}
 	defer rows.Close()
-	for rows.Next(){
+
+	for rows.Next() {
 		var num string
-		if err=rows.Scan(&num); err!=nil{
+		if err = rows.Scan(&num); err != nil {
 			return err
 		}
-		fmt.Println("Number of rows is: "+num)
+		fmt.Println("Number of rows is: " + num)
+		fmt.Println()
 	}
 
 	return nil

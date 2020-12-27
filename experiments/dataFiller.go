@@ -10,7 +10,7 @@ import (
 type dataFiller struct {
 }
 
-func (df *dataFiller) FillData(db *sql.DB) error {
+func (df *dataFiller) FillData(db *sql.ConnPool) error {
 	fmt.Println("start")
 	wg := sync.WaitGroup{}
 	totalRows := 9_000_000
@@ -26,7 +26,7 @@ func (df *dataFiller) FillData(db *sql.DB) error {
 	return nil
 }
 
-func (df *dataFiller) writeMessagesToTest(db *sql.DB, amount int, wg *sync.WaitGroup) {
+func (df *dataFiller) writeMessagesToTest(db *sql.ConnPool, amount int, wg *sync.WaitGroup) {
 	for i := 0; i < amount; i++ {
 		statement := "insert into test (message) value (\"" + strconv.Itoa(i) + " large large message\");"
 		_, err := db.Exec(statement)

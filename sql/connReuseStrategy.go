@@ -1,6 +1,6 @@
 package sql
 
-// connReuseStrategy determines how (*DB).conn returns database connections.
+// connReuseStrategy determines how (*ConnPool).conn returns database connections.
 type connReuseStrategy uint8
 
 const (

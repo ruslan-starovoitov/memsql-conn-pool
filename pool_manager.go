@@ -2,12 +2,14 @@ package memsql_conn_pool
 
 import (
 	"context"
+	"errors"
+	"github.com/orcaman/concurrent-map"
 	"memsql-conn-pool/sql"
 	"time"
 )
 
 type PoolManager struct {
-	pools map[Credentials]*sql.DB
+	pools cmap.ConcurrentMap
 	ctx   context.Context
 
 	totalMax      int
@@ -19,13 +21,13 @@ type PoolManager struct {
 	releasedChan chan struct{}
 }
 
-func (pw *PoolManager) Query(credentials Credentials, sql string) (*sql.Rows, error) {
-	connPool, err := pw.getOrCreateConnPool(credentials)
+func (pm *PoolManager) Query(credentials Credentials, sql string) (*sql.Rows, error) {
+	connPool, err := pm.getOrCreateConnPool(credentials)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := connPool.QueryContext(pw.ctx, sql)
+	rows, err := connPool.QueryContext(pm.ctx, sql)
 	if err != nil {
 		return nil, err
 	}
@@ -33,13 +35,13 @@ func (pw *PoolManager) Query(credentials Credentials, sql string) (*sql.Rows, er
 	return rows, nil
 }
 
-func (pw *PoolManager) Exec(credentials Credentials, sql string) (sql.Result, error) {
-	connPool, err := pw.getOrCreateConnPool(credentials)
+func (pm *PoolManager) Exec(credentials Credentials, sql string) (sql.Result, error) {
+	connPool, err := pm.getOrCreateConnPool(credentials)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := connPool.ExecContext(pw.ctx, sql)
+	result, err := connPool.ExecContext(pm.ctx, sql)
 	if err != nil {
 		return nil, err
 	}
@@ -47,29 +49,31 @@ func (pw *PoolManager) Exec(credentials Credentials, sql string) (sql.Result, er
 	return result, nil
 }
 
-func (pw *PoolManager) ClosePool() {
-	pw.cancel()
+func (pm *PoolManager) ClosePool() {
+	pm.cancel()
 }
 
-func newConnPoolFromCredentials(credentials Credentials) (*sql.DB, error) {
-	dsn := credentials.Username + ":" + credentials.Password + "@/" + credentials.Database + "?interpolateParams=true"
+func newConnPoolFromCredentials(credentials Credentials) (*sql.ConnPool, error) {
+	dsn := GetDataSourceName(credentials)
 	db, err := sql.Open("mysql", dsn)
 	return db, err
 }
 
-func (pw *PoolManager) getOrCreateConnPool(credentials Credentials) (*sql.DB, error) {
-	var db *sql.DB
-	var err error
+var unableToGetPool = errors.New("unable get pool from map")
 
-	//create pool for credentials if not exists
-	if _, ok := pw.pools[credentials]; !ok {
-		db, err = newConnPoolFromCredentials(credentials)
+func (pm *PoolManager) getOrCreateConnPool(credentials Credentials) (*sql.ConnPool, error) {
+	//Create pool if not exists
+	if !pm.pools.Has(credentials.GetId()) {
+		connPool, err := newConnPoolFromCredentials(credentials)
 		if err != nil {
 			return nil, err
 		}
-		//TODO add mutex
-		pw.pools[credentials] = db
+		pm.pools.Set(credentials.GetId(), connPool)
+		return connPool, nil
 	}
-
-	return db, nil
+	//Return pool if exists
+	if tmp, ok := pm.pools.Get(credentials.GetId()); ok {
+		return tmp.(*sql.ConnPool), nil
+	}
+	return nil, unableToGetPool
 }

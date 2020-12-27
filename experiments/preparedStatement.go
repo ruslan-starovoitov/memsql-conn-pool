@@ -9,7 +9,7 @@ import (
 type prepareStatement struct {
 }
 
-func (ps *prepareStatement) FillData(db *sql.DB) error {
+func (ps *prepareStatement) FillData(db *sql.ConnPool) error {
 	fmt.Println("start")
 	wg := sync.WaitGroup{}
 	totalRows := 500_000

@@ -1,31 +1,14 @@
-version: '2'
+version: '3.4'
 
 services:
   memsql:
     image: 'memsql/cluster-in-a-box'
     volumes:
-      - ./database/init.sql:/docker-entrypoint-initdb.d/
+      - "./database/init.sql:/docker-entrypoint-initdb.d/1.sql"
     ports:
       - 3306:3306
       - 8080:8080
     environment:
-      LICENSE_KEY: 'BDMzY2Q2OWZlNzE0MTQ3ZmU4NTE1NTU5ZWRjMGQyNmJkAAAAAAAAAAAEAAAAAAAAAAwwNQIZAI9PK6ZJaNpualdT/iEfnz/CitRFwLArwAIYF6aW2DHP6GQXUCEE32wPwVrtTNcMLW7uAA=='
+      LICENSE_KEY: ${LICENSE_KEY}
       ROOT_PASSWORD: 'RootPass1'
       START_AFTER_INIT: 'Y'
-
-
-#Stop the container(s) using the following command:
-#
-#docker-compose down
-#
-#Delete all containers using the following command:
-#
-#docker rm -f $(docker ps -a -q)
-#
-#Delete all volumes using the following command:
-#
-#docker volume rm $(docker volume ls -q)
-#
-#Restart the containers using the following command:
-#
-#docker-compose up -d

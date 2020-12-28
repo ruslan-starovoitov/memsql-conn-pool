@@ -1,9 +1,5 @@
 package memsql_conn_pool
 
-import (
-	_ "github.com/go-sql-driver/mysql"
-)
-
 //var testCases = []struct {
 //	auth     Auth
 //	Database string

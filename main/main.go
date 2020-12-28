@@ -2,6 +2,7 @@ package main
 
 import (
 	cpool "memsql-conn-pool"
+	_ "memsql-conn-pool/mysql"
 	"sync"
 	"time"
 )

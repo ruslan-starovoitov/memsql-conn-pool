@@ -3,7 +3,6 @@ package memsql_conn_pool
 import (
 	"context"
 	cmap "github.com/orcaman/concurrent-map"
-	_ "memsql-conn-pool/mysql"
 	"time"
 )
 

@@ -5,8 +5,8 @@
 package sql
 
 import (
-	"database/sql/driver"
 	"fmt"
+	"memsql-conn-pool/sql/driver"
 	"reflect"
 	"runtime"
 	"strings"

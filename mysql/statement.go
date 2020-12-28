@@ -12,7 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"memsql-conn-pool/driver"
+	"memsql-conn-pool/sql/driver"
 	"reflect"
 )
 

@@ -6,10 +6,10 @@ package sql
 
 import (
 	"context"
-	"database/sql/driver"
 	"errors"
 	"fmt"
 	"io"
+	"memsql-conn-pool/sql/driver"
 	"reflect"
 	"sort"
 	"strconv"

@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"memsql-conn-pool/driver"
+	"memsql-conn-pool/sql/driver"
 	"time"
 )
 

@@ -11,7 +11,7 @@ package mysql
 import (
 	"io"
 	"math"
-	"memsql-conn-pool/driver"
+	"memsql-conn-pool/sql/driver"
 	"reflect"
 )
 

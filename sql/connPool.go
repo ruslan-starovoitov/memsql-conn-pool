@@ -1020,7 +1020,7 @@ func (db *ConnPool) execDC(ctx context.Context, dc *driverConn, release func(err
 func (db *ConnPool) QueryContext(ctx context.Context, query string, args ...interface{}) (*Rows, error) {
 	var rows *Rows
 	var err error
-	//TODO choose a connection resuse strategy
+	//TODO choose a connection reuse strategy
 	//for i := 0; i < maxBadConnRetries; i++ {
 	//	rows, err = db.query(ctx, query, args, cachedOrNewConn)
 	//	if err != driver.ErrBadConn {

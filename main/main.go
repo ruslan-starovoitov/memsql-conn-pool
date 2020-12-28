@@ -1,40 +1,55 @@
 package main
 
 import (
-	"fmt"
 	pool "memsql-conn-pool"
+	"sync"
 	"time"
 )
 
+var credentials = []pool.Credentials{
+	//{
+	//	Username: "root",
+	//	Password: "RootPass1",
+	//	Database: "hellomemsql",
+	//},
+	//{
+	//	Username: "user1",
+	//	Password: "pass1",
+	//	Database: "hellomemsql1",
+	//},
+	//{
+	//	Username: "user2",
+	//	Password: "pass2",
+	//	Database: "hellomemsql2",
+	//},
+	//{
+	//	Username: "user3",
+	//	Password: "pass3",
+	//	Database: "hellomemsql3",
+	//},
+	{
+		Username: "user9",
+		Password: "pass9",
+		Database: "hellomemsql7",
+	},
+}
+
 func main() {
-	err := run()
-	if err != nil {
-		panic(err)
-	}
-}
-
-var credentials = pool.Credentials{
-	Username: "root",
-	Password: "RootPass1",
-	Database: "hellomemsql",
-}
-
-func run() error {
+	println("start")
 	connPool := pool.NewPool(100, time.Minute)
-	rows, err := connPool.Query(credentials, "select count(*) from test")
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
+	seeder := seeder{}
+	reader := reader{}
+	wg := sync.WaitGroup{}
 
-	for rows.Next() {
-		var num string
-		if err = rows.Scan(&num); err != nil {
-			return err
-		}
-		fmt.Println("Number of rows is: " + num)
-		fmt.Println()
+	for _, cr := range credentials {
+		seeder.Seed(cr, connPool)
 	}
 
-	return nil
+	for _, cr := range credentials {
+		wg.Add(1)
+		go reader.Read(cr, connPool, &wg)
+	}
+
+	wg.Wait()
+	println("the end")
 }

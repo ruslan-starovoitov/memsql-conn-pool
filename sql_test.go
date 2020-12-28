@@ -162,7 +162,7 @@ func closeDB(t testing.TB, db *ConnPool) {
 			// their statements first, then we can safely
 			// verify this is always zero here, and any
 			// other value is a leak.
-			t.Errorf("while closing db, freeConn %d/%d had %d open stmts; want 0", i, len(db.freeConn), n)
+			t.Errorf("while closing connPool, freeConn %d/%d had %d open stmts; want 0", i, len(db.freeConn), n)
 		}
 	}
 	db.mu.Unlock()
@@ -181,7 +181,7 @@ func closeDB(t testing.TB, db *ConnPool) {
 	}
 }
 
-// numPrepares assumes that db has exactly 1 idle conn and returns
+// numPrepares assumes that connPool has exactly 1 idle conn and returns
 // its count of calls to Prepare
 func numPrepares(t *testing.T, db *ConnPool) int {
 	if n := len(db.freeConn); n != 1 {
@@ -221,7 +221,7 @@ func (connPool *ConnPool) numOpenConns() int {
 	return connPool.numOpen
 }
 
-// clearAllConns closes all connections in db.
+// clearAllConns closes all connections in connPool.
 func (connPool *ConnPool) clearAllConns(t *testing.T) {
 	connPool.SetMaxIdleConns(0)
 
@@ -373,7 +373,7 @@ func waitCondition(waitFor, checkEvery time.Duration, fn func() bool) bool {
 	return false
 }
 
-// waitForFree checks db.numFreeConns until either it equals want or
+// waitForFree checks connPool.numFreeConns until either it equals want or
 // the maxWait time elapses.
 func waitForFree(t *testing.T, db *ConnPool, maxWait time.Duration, want int) {
 	var numFree int
@@ -418,7 +418,7 @@ func TestQueryContextWait(t *testing.T) {
 	// Verify closed rows connection after error condition.
 	waitForFree(t, db, 5*time.Second, 1)
 	if prepares := numPrepares(t, db) - prepares0; prepares != 1 {
-		// TODO(kardianos): if the context timeouts before the db.QueryContext
+		// TODO(kardianos): if the context timeouts before the connPool.QueryContext
 		// executes this check may fail. After adjusting how the context
 		// is canceled above revert this back to a Fatal error.
 		t.Logf("executed %d Prepare statements; want 1", prepares)
@@ -1101,7 +1101,7 @@ func TestTxStmtPreparedOnce(t *testing.T) {
 
 	prepares0 := numPrepares(t, db)
 
-	// db.Prepare increments numPrepares.
+	// connPool.Prepare increments numPrepares.
 	stmt, err := db.Prepare("INSERT|t1|name=?,age=?")
 	if err != nil {
 		t.Fatalf("Stmt, err = %v, %v", stmt, err)
@@ -1145,7 +1145,7 @@ func TestTxStmtClosedRePrepares(t *testing.T) {
 
 	prepares0 := numPrepares(t, db)
 
-	// db.Prepare increments numPrepares.
+	// connPool.Prepare increments numPrepares.
 	stmt, err := db.Prepare("INSERT|t1|name=?,age=?")
 	if err != nil {
 		t.Fatalf("Stmt, err = %v, %v", stmt, err)
@@ -1193,7 +1193,7 @@ func TestParentStmtOutlivesTxStmt(t *testing.T) {
 
 	prepares0 := numPrepares(t, db)
 
-	// db.Prepare increments numPrepares.
+	// connPool.Prepare increments numPrepares.
 	stmt, err := db.Prepare("INSERT|t1|name=?,age=?")
 	if err != nil {
 		t.Fatalf("Stmt, err = %v, %v", stmt, err)
@@ -1239,7 +1239,7 @@ func TestTxStmtFromTxStmtRePrepares(t *testing.T) {
 	defer closeDB(t, db)
 	exec(t, db, "CREATE|t1|name=string,age=int32")
 	prepares0 := numPrepares(t, db)
-	// db.Prepare increments numPrepares.
+	// connPool.Prepare increments numPrepares.
 	stmt, err := db.Prepare("INSERT|t1|name=?,age=?")
 	if err != nil {
 		t.Fatalf("Stmt, err = %v, %v", stmt, err)
@@ -1864,7 +1864,7 @@ func nullTestRun(t *testing.T, spec nullTestSpec) {
 	defer closeDB(t, db)
 	exec(t, db, fmt.Sprintf("CREATE|t|id=int32,name=string,nullf=%s,notnullf=%s", spec.nullType, spec.notNullType))
 
-	// Inserts with db.Exec:
+	// Inserts with connPool.Exec:
 	exec(t, db, "INSERT|t|id=?,name=?,nullf=?,notnullf=?", 1, "alice", spec.rows[0].nullParam, spec.rows[0].notNullParam)
 	exec(t, db, "INSERT|t|id=?,name=?,nullf=?,notnullf=?", 2, "bob", spec.rows[1].nullParam, spec.rows[1].notNullParam)
 
@@ -1949,7 +1949,7 @@ func TestIssue4902(t *testing.T) {
 	opens := driver.openCount - opens0
 	if opens > 1 {
 		t.Errorf("opens = %d; want <= 1", opens)
-		t.Logf("db = %#v", db)
+		t.Logf("connPool = %#v", db)
 		t.Logf("driver = %#v", driver)
 		t.Logf("stmt = %#v", stmt)
 	}
@@ -2084,7 +2084,7 @@ func TestMaxOpenConns(t *testing.T) {
 	if opens > 10 {
 		t.Logf("open calls = %d", opens)
 		t.Logf("close calls = %d", closes)
-		t.Errorf("db connections opened = %d; want <= 10", opens)
+		t.Errorf("connPool connections opened = %d; want <= 10", opens)
 		db.dumpDeps(t)
 	}
 
@@ -2145,17 +2145,17 @@ func TestMaxOpenConnsOnBusy(t *testing.T) {
 
 	conn0, err := db.conn(ctx, cachedOrNewConn)
 	if err != nil {
-		t.Fatalf("db open conn fail: %v", err)
+		t.Fatalf("connPool open conn fail: %v", err)
 	}
 
 	conn1, err := db.conn(ctx, cachedOrNewConn)
 	if err != nil {
-		t.Fatalf("db open conn fail: %v", err)
+		t.Fatalf("connPool open conn fail: %v", err)
 	}
 
 	conn2, err := db.conn(ctx, cachedOrNewConn)
 	if err != nil {
-		t.Fatalf("db open conn fail: %v", err)
+		t.Fatalf("connPool open conn fail: %v", err)
 	}
 
 	if g, w := db.numOpen, 3; g != w {
@@ -2202,7 +2202,7 @@ func TestPendingConnsAfterErr(t *testing.T) {
 	db.SetMaxOpenConns(maxOpen)
 	db.SetMaxIdleConns(0)
 
-	errOffline := errors.New("db offline")
+	errOffline := errors.New("connPool offline")
 
 	defer func() { setHookOpenErr(nil) }()
 
@@ -2461,7 +2461,7 @@ func TestStmtCloseDeps(t *testing.T) {
 		t.Logf("open calls = %d", opens)
 		t.Logf("close calls = %d", closes)
 		t.Logf("open delta = %d", openDelta)
-		t.Errorf("db connections opened = %d; want <= 2", openDelta)
+		t.Errorf("connPool connections opened = %d; want <= 2", openDelta)
 		db.dumpDeps(t)
 	}
 
@@ -2519,10 +2519,10 @@ func TestCloseConnBeforeStmts(t *testing.T) {
 	}
 	err = db.Close()
 	if err != nil {
-		t.Errorf("db Close = %v", err)
+		t.Errorf("connPool Close = %v", err)
 	}
 	if !dc.closed {
-		t.Errorf("after db.Close, driverConn should be closed")
+		t.Errorf("after connPool.Close, driverConn should be closed")
 	}
 	if n := len(dc.openStmt); n != 0 {
 		t.Errorf("driverConn num openStmt = %d; want 0", n)
@@ -2632,7 +2632,7 @@ func TestManyErrBadConn(t *testing.T) {
 		if db.numOpen != nconn {
 			t.Fatalf("unexpected numOpen %d (was expecting %d)", db.numOpen, nconn)
 		} else if len(db.freeConn) != nconn {
-			t.Fatalf("unexpected len(db.freeConn) %d (was expecting %d)", len(db.freeConn), nconn)
+			t.Fatalf("unexpected len(connPool.freeConn) %d (was expecting %d)", len(db.freeConn), nconn)
 		}
 		for _, conn := range db.freeConn {
 			conn.Lock()
@@ -2894,7 +2894,7 @@ func TestConnExpiresFreshOutOfPool(t *testing.T) {
 				if err == nil {
 					db.putConn(conn, err, false)
 				} else {
-					t.Errorf("db.conn: %v", err)
+					t.Errorf("connPool.conn: %v", err)
 				}
 			}()
 			go func() {
@@ -3038,15 +3038,15 @@ func TestErrBadConnReconnect(t *testing.T) {
 		}
 	}
 
-	// db.Exec
+	// connPool.Exec
 	dbExec := func() error {
 		_, err := db.Exec("INSERT|t1|name=?,age=?,dead=?", "Gordon", 3, true)
 		return err
 	}
-	simulateBadConn("db.Exec prepare", &hookPrepareBadConn, dbExec)
-	simulateBadConn("db.Exec exec", &hookExecBadConn, dbExec)
+	simulateBadConn("connPool.Exec prepare", &hookPrepareBadConn, dbExec)
+	simulateBadConn("connPool.Exec exec", &hookExecBadConn, dbExec)
 
-	// db.Query
+	// connPool.Query
 	dbQuery := func() error {
 		rows, err := db.Query("SELECT|t1|age,name|")
 		if err == nil {
@@ -3054,11 +3054,11 @@ func TestErrBadConnReconnect(t *testing.T) {
 		}
 		return err
 	}
-	simulateBadConn("db.Query prepare", &hookPrepareBadConn, dbQuery)
-	simulateBadConn("db.Query query", &hookQueryBadConn, dbQuery)
+	simulateBadConn("connPool.Query prepare", &hookPrepareBadConn, dbQuery)
+	simulateBadConn("connPool.Query query", &hookQueryBadConn, dbQuery)
 
-	// db.Prepare
-	simulateBadConn("db.Prepare", &hookPrepareBadConn, func() error {
+	// connPool.Prepare
+	simulateBadConn("connPool.Prepare", &hookPrepareBadConn, func() error {
 		stmt, err := db.Prepare("INSERT|t1|name=?,age=?,dead=?")
 		if err != nil {
 			return err
@@ -3142,7 +3142,7 @@ func TestTxEndBadConn(t *testing.T) {
 		}
 	}
 
-	// db.Exec
+	// connPool.Exec
 	dbExec := func(endTx func(tx *Tx) error) func() error {
 		return func() error {
 			tx, err := db.Begin()
@@ -3156,10 +3156,10 @@ func TestTxEndBadConn(t *testing.T) {
 			return endTx(tx)
 		}
 	}
-	simulateBadConn("db.Tx.Exec commit", &hookCommitBadConn, dbExec((*Tx).Commit))
-	simulateBadConn("db.Tx.Exec rollback", &hookRollbackBadConn, dbExec((*Tx).Rollback))
+	simulateBadConn("connPool.Tx.Exec commit", &hookCommitBadConn, dbExec((*Tx).Commit))
+	simulateBadConn("connPool.Tx.Exec rollback", &hookRollbackBadConn, dbExec((*Tx).Rollback))
 
-	// db.Query
+	// connPool.Query
 	dbQuery := func(endTx func(tx *Tx) error) func() error {
 		return func() error {
 			tx, err := db.Begin()
@@ -3175,8 +3175,8 @@ func TestTxEndBadConn(t *testing.T) {
 			return endTx(tx)
 		}
 	}
-	simulateBadConn("db.Tx.Query commit", &hookCommitBadConn, dbQuery((*Tx).Commit))
-	simulateBadConn("db.Tx.Query rollback", &hookRollbackBadConn, dbQuery((*Tx).Rollback))
+	simulateBadConn("connPool.Tx.Query commit", &hookCommitBadConn, dbQuery((*Tx).Commit))
+	simulateBadConn("connPool.Tx.Query rollback", &hookRollbackBadConn, dbQuery((*Tx).Rollback))
 }
 
 type concurrentTest interface {
@@ -4142,7 +4142,7 @@ func TestQueryExecContextOnly(t *testing.T) {
 
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		t.Fatal("db.Conn", err)
+		t.Fatal("connPool.Conn", err)
 	}
 	defer conn.Close()
 	coc := conn.dc.ci.(*ctxOnlyConn)

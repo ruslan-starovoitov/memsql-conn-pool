@@ -31,15 +31,15 @@ type ConnPool struct {
 	// connections in Stmt.css.
 	numClosed uint64
 
-	mu           sync.Mutex // protects following fields
-	freeConn     []*driverConn
-	connRequests map[uint64]chan connRequest
+	mu       sync.Mutex // protects following fields
+	freeConn []*driverConn
+	//connRequests map[uint64]chan connCreationResponse
 	//nextRequest  uint64 // Next key to use in connRequests.
 	numOpen int // number of opened and pending open connections
 	// Used to signal the need for new connections
 	// a goroutine running connectionOpener() reads on this chan and
-	// maybeOpenNewConnections sends on the chan (one send per needed connection)
-	// It is closed during db.Close(). The close tells the connectionOpener
+	// maybeOpenNewConnectionsLocked sends on the chan (one send per needed connection)
+	// It is closed during connPool.Close(). The close tells the connectionOpener
 	// goroutine to exit.
 	openerCh     chan struct{}
 	closed       bool
@@ -48,10 +48,10 @@ type ConnPool struct {
 	maxIdleCount int                    // zero means defaultMaxIdleConns; negative means 0
 	//TODO unlimited
 	//maxOpen           int                    // <= 0 means unlimited
-	maxLifetime       time.Duration // maximum amount of time a connection may be reused
-	maxIdleTime       time.Duration // maximum amount of time a connection may be idle before being closed
-	cleanerCh         chan struct{}
-	waitCount         int64 // Total number of connections waited for.
+	maxLifetime time.Duration // maximum amount of time a connection may be reused
+	maxIdleTime time.Duration // maximum amount of time a connection may be idle before being closed
+	cleanerCh   chan struct{}
+	//waitCount         int64 // Total number of connections waited for.
 	maxIdleClosed     int64 // Total number of connections closed due to idle count.
 	maxIdleTimeClosed int64 // Total number of connections closed due to idle time.
 	maxLifetimeClosed int64 // Total number of connections closed due to max connection lifetime limit.

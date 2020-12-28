@@ -7,15 +7,24 @@ import (
 	"time"
 )
 
+//connRequest добавляется в connRequests когда ConnPool не может использовать закешированные соединения
+type connRequest struct {
+	//Ссылка на пул, который сделал запрос
+	connPool *ConnPool
+	//Канал, который пул слушает
+	responce chan connCreationResponse
+}
+
 //PoolManager содержит хеш-таблицу пулов соединений. Он содержит
 //общие ограничения на количество соединений
 type PoolManager struct {
 	pools cmap.ConcurrentMap
 	ctx   context.Context
 
-	totalMax int
-	numIdle  int
-	numOpen  int
+	totalMax  int
+	numIdle   int
+	numOpen   int
+	waitCount int64 // Total number of connections waited for.
 
 	idleTimeout time.Duration
 	cancel      context.CancelFunc
@@ -24,7 +33,7 @@ type PoolManager struct {
 
 	mu sync.Mutex // protects following fields
 	//для запросов на создание новых соединений
-	connRequests  map[uint64]chan connRequest
+	connRequests  map[uint64]connRequest
 	nextRequest   uint64 // Next key to use in connRequests.
 	openerChannel chan *ConnPool
 }
@@ -124,7 +133,8 @@ func (poolManager *PoolManager) nextRequestKeyLocked() uint64 {
 // Assumes poolManager.mu is locked.
 // If there are connRequests and the connection limit hasn't been reached,
 // then tell the connectionOpener to open new connections.
-func (poolManager *PoolManager) maybeOpenNewConnections() {
+func (poolManager *PoolManager) maybeOpenNewConnectionsLocked() {
+	poolManager.mu.Lock()
 	numRequests := len(poolManager.connRequests)
 	if poolManager.totalMax > 0 {
 		numCanOpen := poolManager.totalMax - poolManager.numOpen
@@ -132,14 +142,20 @@ func (poolManager *PoolManager) maybeOpenNewConnections() {
 			numRequests = numCanOpen
 		}
 	}
-	for numRequests > 0 {
+
+	for _, value := range poolManager.connRequests {
 		poolManager.numOpen++ // optimistically
-		numRequests--
 		if poolManager.closed {
 			return
 		}
-
 		//Дать команду создать соединение для конкретного пула
-		poolManager.openerChannel <- struct{}{}
+		poolManager.openerChannel <- value.connPool
+
+		numRequests--
+		if numRequests == 0 {
+			break
+		}
 	}
+
+	poolManager.mu.Unlock()
 }

@@ -48,7 +48,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		err := s.db.PingContext(ctx)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("db down: %v", err), http.StatusFailedDependency)
+			http.Error(w, fmt.Sprintf("connPool down: %v", err), http.StatusFailedDependency)
 			return
 		}
 		w.WriteHeader(http.StatusOK)

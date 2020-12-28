@@ -99,7 +99,7 @@ type NamedArg struct {
 //
 // Example usage:
 //
-//     db.ExecContext(ctx, `
+//     connPool.ExecContext(ctx, `
 //         delete from Invoice
 //         where
 //             TimeCreated < @end
@@ -177,7 +177,7 @@ type RawBytes []byte
 // it can be used as a scan destination:
 //
 //  var s NullString
-//  err := db.QueryRow("SELECT name FROM foo WHERE id=?", id).Scan(&s)
+//  err := connPool.QueryRow("SELECT name FROM foo WHERE id=?", id).Scan(&s)
 //  ...
 //  if s.Valid {
 //     // use s.String
@@ -368,7 +368,7 @@ type Scanner interface {
 // Example usage:
 //
 //   var outArg string
-//   _, err := db.ExecContext(ctx, "ProcName", sql.Named("Arg1", sql.Out{Dest: &outArg}))
+//   _, err := connPool.ExecContext(ctx, "ProcName", sql.Named("Arg1", sql.Out{Dest: &outArg}))
 type Out struct {
 	_Named_Fields_Required struct{}
 
@@ -404,7 +404,7 @@ const (
 // interfaces returned via that Conn, such as calls on Tx, Stmt,
 // Result, Rows)
 type driverConn struct {
-	db        *ConnPool
+	connPool  *ConnPool
 	createdAt time.Time
 
 	sync.Mutex  // guards following
@@ -414,15 +414,15 @@ type driverConn struct {
 	finalClosed bool // ci.Close has been called
 	openStmt    map[*driverStmt]bool
 
-	// guarded by db.mu
+	// guarded by connPool.mu
 	inUse      bool
 	returnedAt time.Time // Time the connection was created or returned.
-	onPut      []func()  // code (with db.mu held) run when conn is next returned
-	dbmuClosed bool      // same as closed, but guarded by db.mu, for removeClosedStmtLocked
+	onPut      []func()  // code (with connPool.mu held) run when conn is next returned
+	dbmuClosed bool      // same as closed, but guarded by connPool.mu, for removeClosedStmtLocked
 }
 
 func (dc *driverConn) releaseConn(err error) {
-	dc.db.putConn(dc, err, true)
+	dc.connPool.putConn(dc, err, true)
 }
 
 func (dc *driverConn) removeOpenStmt(ds *driverStmt) {
@@ -493,7 +493,7 @@ func (dc *driverConn) prepareLocked(ctx context.Context, cg stmtConnGrabber, que
 	return ds, nil
 }
 
-// the dc.db's Mutex is held.
+// the dc.connPool's Mutex is held.
 func (dc *driverConn) closeDBLocked() func() error {
 	dc.Lock()
 	defer dc.Unlock()
@@ -501,7 +501,7 @@ func (dc *driverConn) closeDBLocked() func() error {
 		return func() error { return errors.New("sql: duplicate driverConn close") }
 	}
 	dc.closed = true
-	return dc.db.removeDepLocked(dc, dc)
+	return dc.connPool.removeDepLocked(dc, dc)
 }
 
 func (dc *driverConn) Close() error {
@@ -514,10 +514,10 @@ func (dc *driverConn) Close() error {
 	dc.Unlock() // not defer; removeDep finalClose calls may need to lock
 
 	// And now updates that require holding dc.mu.Lock.
-	dc.db.mu.Lock()
+	dc.connPool.mu.Lock()
 	dc.dbmuClosed = true
-	fn := dc.db.removeDepLocked(dc, dc)
-	dc.db.mu.Unlock()
+	fn := dc.connPool.removeDepLocked(dc, dc)
+	dc.connPool.mu.Unlock()
 	return fn()
 }
 
@@ -544,13 +544,13 @@ func (dc *driverConn) finalClose() error {
 		dc.ci = nil
 	})
 
-	dc.db.mu.Lock()
-	dc.db.numOpen--
+	dc.connPool.mu.Lock()
+	dc.connPool.numOpen--
 	//TODO попытка открыть новые соединения
-	dc.db.maybeOpenNewConnections()
-	dc.db.mu.Unlock()
+	dc.connPool.poolManager.maybeOpenNewConnectionsLocked()
+	dc.connPool.mu.Unlock()
 
-	atomic.AddUint64(&dc.db.numClosed, 1)
+	atomic.AddUint64(&dc.connPool.numClosed, 1)
 	return err
 }
 
@@ -645,7 +645,7 @@ func (connPool *ConnPool) removeDepLocked(x finalCloser, dep interface{}) func()
 
 // This is the size of the connectionOpener request chan (ConnPool.openerCh).
 // This value should be larger than the maximum typical value
-// used for db.maxOpen. If maxOpen is significantly larger than
+// used for connPool.maxOpen. If maxOpen is significantly larger than
 // connectionRequestQueueSize then it is possible for ALL calls into the *ConnPool
 // to block until the connectionOpener can satisfy the backlog of requests.
 var connectionRequestQueueSize = 1000000
@@ -683,11 +683,11 @@ func OpenDB(c driver.Connector) *ConnPool {
 	//ctx, cancel := context.WithCancel(context.Background())
 	_, cancel := context.WithCancel(context.Background())
 	connPool := &ConnPool{
-		connector:    c,
-		openerCh:     make(chan struct{}, connectionRequestQueueSize),
-		lastPut:      make(map[*driverConn]string),
-		connRequests: make(map[uint64]chan connRequest),
-		stop:         cancel,
+		connector: c,
+		openerCh:  make(chan struct{}, connectionRequestQueueSize),
+		lastPut:   make(map[*driverConn]string),
+		//connRequests: make(map[uint64]chan connCreationResponse),
+		stop: cancel,
 	}
 
 	//TODO я заменил на globalConnectionOpener
@@ -793,9 +793,10 @@ func (connPool *ConnPool) Close() error {
 	}
 	connPool.freeConn = nil
 	connPool.closed = true
-	for _, req := range connPool.connRequests {
-		close(req)
-	}
+	//TODO в пуле больше не содержатся запросы на создание новых соединений
+	//for _, req := range connPool.connRequests {
+	//	close(req)
+	//}
 	connPool.mu.Unlock()
 	for _, fn := range fns {
 		err1 := fn()
@@ -837,62 +838,64 @@ func (connPool *ConnPool) shortestIdleTimeLocked() time.Duration {
 	return min
 }
 
-// SetMaxIdleConns sets the maximum number of connections in the idle
-// connection pool.
-//
-// If MaxOpenConns is greater than 0 but less than the new MaxIdleConns,
-// then the new MaxIdleConns will be reduced to match the MaxOpenConns limit.
-//
-// If n <= 0, no idle connections are retained.
-//
-// The default max idle connections is currently 2. This may change in
-// a future release.
-func (connPool *ConnPool) SetMaxIdleConns(n int) {
-	connPool.mu.Lock()
-	if n > 0 {
-		connPool.maxIdleCount = n
-	} else {
-		// No idle connections.
-		connPool.maxIdleCount = -1
-	}
-	// Make sure maxIdle doesn't exceed maxOpen
-	if connPool.maxOpen > 0 && connPool.maxIdleConnsLocked() > connPool.maxOpen {
-		connPool.maxIdleCount = connPool.maxOpen
-	}
-	var closing []*driverConn
-	idleCount := len(connPool.freeConn)
-	maxIdle := connPool.maxIdleConnsLocked()
-	if idleCount > maxIdle {
-		closing = connPool.freeConn[maxIdle:]
-		connPool.freeConn = connPool.freeConn[:maxIdle]
-	}
-	connPool.maxIdleClosed += int64(len(closing))
-	connPool.mu.Unlock()
-	for _, c := range closing {
-		c.Close()
-	}
-}
+//TODO больше не нужно
+//// SetMaxIdleConns sets the maximum number of connections in the idle
+//// connection pool.
+////
+//// If MaxOpenConns is greater than 0 but less than the new MaxIdleConns,
+//// then the new MaxIdleConns will be reduced to match the MaxOpenConns limit.
+////
+//// If n <= 0, no idle connections are retained.
+////
+//// The default max idle connections is currently 2. This may change in
+//// a future release.
+//func (connPool *ConnPool) SetMaxIdleConns(n int) {
+//	connPool.mu.Lock()
+//	if n > 0 {
+//		connPool.maxIdleCount = n
+//	} else {
+//		// No idle connections.
+//		connPool.maxIdleCount = -1
+//	}
+//	// Make sure maxIdle doesn't exceed maxOpen
+//	if connPool.maxOpen > 0 && connPool.maxIdleConnsLocked() > connPool.maxOpen {
+//		connPool.maxIdleCount = connPool.maxOpen
+//	}
+//	var closing []*driverConn
+//	idleCount := len(connPool.freeConn)
+//	maxIdle := connPool.maxIdleConnsLocked()
+//	if idleCount > maxIdle {
+//		closing = connPool.freeConn[maxIdle:]
+//		connPool.freeConn = connPool.freeConn[:maxIdle]
+//	}
+//	connPool.maxIdleClosed += int64(len(closing))
+//	connPool.mu.Unlock()
+//	for _, c := range closing {
+//		c.Close()
+//	}
+//}
 
-// SetMaxOpenConns sets the maximum number of open connections to the database.
-//
-// If MaxIdleConns is greater than 0 and the new MaxOpenConns is less than
-// MaxIdleConns, then MaxIdleConns will be reduced to match the new
-// MaxOpenConns limit.
-//
-// If n <= 0, then there is no limit on the number of open connections.
-// The default is 0 (unlimited).
-func (connPool *ConnPool) SetMaxOpenConns(n int) {
-	connPool.mu.Lock()
-	connPool.maxOpen = n
-	if n < 0 {
-		connPool.maxOpen = 0
-	}
-	syncMaxIdle := connPool.maxOpen > 0 && connPool.maxIdleConnsLocked() > connPool.maxOpen
-	connPool.mu.Unlock()
-	if syncMaxIdle {
-		connPool.SetMaxIdleConns(n)
-	}
-}
+//Больше не нужно
+//// SetMaxOpenConns sets the maximum number of open connections to the database.
+////
+//// If MaxIdleConns is greater than 0 and the new MaxOpenConns is less than
+//// MaxIdleConns, then MaxIdleConns will be reduced to match the new
+//// MaxOpenConns limit.
+////
+//// If n <= 0, then there is no limit on the number of open connections.
+//// The default is 0 (unlimited).
+//func (connPool *ConnPool) SetMaxOpenConns(n int) {
+//	connPool.mu.Lock()
+//	connPool.maxOpen = n
+//	if n < 0 {
+//		connPool.maxOpen = 0
+//	}
+//	syncMaxIdle := connPool.maxOpen > 0 && connPool.maxIdleConnsLocked() > connPool.maxOpen
+//	connPool.mu.Unlock()
+//	if syncMaxIdle {
+//		connPool.SetMaxIdleConns(n)
+//	}
+//}
 
 // SetConnMaxLifetime sets the maximum amount of time a connection may be reused.
 //
@@ -1052,7 +1055,7 @@ func (connPool *ConnPool) Stats() DBStats {
 		OpenConnections: connPool.numOpen,
 		InUse:           connPool.numOpen - len(connPool.freeConn),
 
-		WaitCount:         connPool.waitCount,
+		//WaitCount:         connPool.waitCount,
 		WaitDuration:      time.Duration(wait),
 		MaxIdleClosed:     connPool.maxIdleClosed,
 		MaxIdleTimeClosed: connPool.maxIdleTimeClosed,
@@ -1061,28 +1064,29 @@ func (connPool *ConnPool) Stats() DBStats {
 	return stats
 }
 
+// TODO заменил глобальным maybeOpenNewConnectionsLocked в PoolManager
 // TODO просит создать запрошеное кол-во соединений у другой горутины
 // TODO откуда вызывается?
-// Assumes db.mu is locked.
+// Assumes connPool.mu is locked.
 // If there are connRequests and the connection limit hasn't been reached,
 // then tell the connectionOpener to open new connections.
-func (connPool *ConnPool) maybeOpenNewConnections() {
-	numRequests := len(connPool.connRequests)
-	if connPool.maxOpen > 0 {
-		numCanOpen := connPool.maxOpen - connPool.numOpen
-		if numCanOpen < numRequests {
-			numRequests = numCanOpen
-		}
-	}
-	for numRequests > 0 {
-		connPool.numOpen++ // optimistically
-		numRequests--
-		if connPool.closed {
-			return
-		}
-		connPool.openerCh <- struct{}{}
-	}
-}
+//func (connPool *ConnPool) maybeOpenNewConnectionsLocked() {
+//	numRequests := len(connPool.connRequests)
+//	if connPool.maxOpen > 0 {
+//		numCanOpen := connPool.maxOpen - connPool.numOpen
+//		if numCanOpen < numRequests {
+//			numRequests = numCanOpen
+//		}
+//	}
+//	for numRequests > 0 {
+//		connPool.numOpen++ // optimistically
+//		numRequests--
+//		if connPool.closed {
+//			return
+//		}
+//		connPool.openerCh <- struct{}{}
+//	}
+//}
 
 //TODO я заменил на globalConnectionOpener
 //// Runs in a separate goroutine, opens new connections when requested.
@@ -1102,7 +1106,7 @@ func (connPool *ConnPool) maybeOpenNewConnections() {
 //TODO метод создаёт новое соединение/ вызывается из connectionOpener горутины
 // Open one new connection
 func (connPool *ConnPool) openNewConnection(ctx context.Context) {
-	// maybeOpenNewConnections has already executed connPool.numOpen++ before it sent
+	// maybeOpenNewConnectionsLocked has already executed connPool.numOpen++ before it sent
 	// on connPool.openerCh. This function must execute connPool.numOpen-- if the
 	// connection fails or is closed before returning.
 	ci, err := connPool.connector.Connect(ctx)
@@ -1119,11 +1123,11 @@ func (connPool *ConnPool) openNewConnection(ctx context.Context) {
 		connPool.numOpen--
 		connPool.putConnDBLocked(nil, err)
 		//TODO странно / попытка открыть новые соединения
-		connPool.maybeOpenNewConnections()
+		connPool.poolManager.maybeOpenNewConnectionsLocked()
 		return
 	}
 	dc := &driverConn{
-		db:         connPool,
+		connPool:   connPool,
 		createdAt:  nowFunc(),
 		returnedAt: nowFunc(),
 		ci:         ci,
@@ -1136,10 +1140,10 @@ func (connPool *ConnPool) openNewConnection(ctx context.Context) {
 	}
 }
 
-// connRequest represents one request for a new connection
+// connCreationResponse represents one request for a new connection
 // When there are no idle connections available, ConnPool.conn will create
-// a new connRequest and put it on the db.connRequests list.
-type connRequest struct {
+// a new connCreationResponse and put it on the connPool.connRequests list.
+type connCreationResponse struct {
 	conn *driverConn
 	err  error
 }
@@ -1150,6 +1154,7 @@ var errDBClosed = errors.New("sql: database is closed")
 func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn, error) {
 	// Check if the context is closed.
 	connPool.mu.Lock()
+
 	if connPool.closed {
 		connPool.mu.Unlock()
 		return nil, errDBClosed
@@ -1199,13 +1204,19 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		// TODO try to remove idle connection from another connection pool and
 		//  wait for free connection
 
-		// Make the connRequest channel. It's buffered so that the
-		// connectionOpener doesn't block while waiting for the req to be read.
+		// Make the connCreationResponse channel. It's buffered so that the
+		// connectionOpener doesn't block while waiting for the responseChan to be read.
 
-		req := make(chan connRequest, 1)
-		reqKey := connPool.nextRequestKeyLocked()
-		connPool.connRequests[reqKey] = req
-		connPool.waitCount++
+		responseChan := make(chan connCreationResponse, 1)
+		reqKey := connPool.poolManager.nextRequestKeyLocked()
+
+		connPool.poolManager.mu.Lock()
+		connPool.poolManager.connRequests[reqKey] = connRequest{
+			connPool: connPool,
+			responce: responseChan,
+		}
+		connPool.poolManager.waitCount++
+		connPool.poolManager.mu.Unlock()
 		connPool.mu.Unlock()
 
 		waitStart := nowFunc()
@@ -1216,23 +1227,23 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		case <-ctx.Done():
 			// Remove the connection request and ensure no value has been sent
 			// on it after removing.
-			connPool.mu.Lock()
-			delete(connPool.connRequests, reqKey)
-			connPool.mu.Unlock()
+			connPool.poolManager.mu.Lock()
+			delete(connPool.poolManager.connRequests, reqKey)
+			connPool.poolManager.mu.Unlock()
 
 			atomic.AddInt64(&connPool.waitDuration, int64(time.Since(waitStart)))
 
 			select {
 			default:
 			//And new connection was created
-			case ret, ok := <-req:
+			case ret, ok := <-responseChan:
 				//put connection to free slice
 				if ok && ret.conn != nil {
 					connPool.putConn(ret.conn, ret.err, false)
 				}
 			}
 			return nil, ctx.Err()
-		case ret, ok := <-req:
+		case ret, ok := <-responseChan:
 			atomic.AddInt64(&connPool.waitDuration, int64(time.Since(waitStart)))
 
 			if !ok {
@@ -1271,13 +1282,13 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		connPool.mu.Lock()
 		connPool.numOpen-- // correct for earlier optimism
 		//TODO попытка открыть новые соедиения
-		connPool.maybeOpenNewConnections()
+		connPool.poolManager.maybeOpenNewConnectionsLocked()
 		connPool.mu.Unlock()
 		return nil, err
 	}
 	connPool.mu.Lock()
 	dc := &driverConn{
-		db:         connPool,
+		connPool:   connPool,
 		createdAt:  nowFunc(),
 		returnedAt: nowFunc(),
 		ci:         ci,
@@ -1316,7 +1327,7 @@ func (connPool *ConnPool) noteUnusedDriverStatement(c *driverConn, ds *driverStm
 const debugGetPut = false
 
 // TODO изучить / кладёт соединение в пулл / вызывает создание новых соединений
-// putConn adds a connection to the db's free pool.
+// putConn adds a connection to the connPool's free pool.
 // err is optionally the last error that occurred on this connection.
 func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) {
 	if err != driver.ErrBadConn {
@@ -1353,7 +1364,7 @@ func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) 
 		// Since the conn is considered bad and is being discarded, treat it
 		// as closed. Don't decrement the open count here, finalClose will
 		// take care of that.
-		connPool.maybeOpenNewConnections()
+		connPool.poolManager.maybeOpenNewConnectionsLocked()
 		connPool.mu.Unlock()
 		dc.Close()
 		return
@@ -1370,33 +1381,38 @@ func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) 
 	}
 }
 
-// Satisfy a connRequest or put the driverConn in the idle pool and return true
+// Satisfy a connCreationResponse or put the driverConn in the idle pool and return true
 // or return false.
-// putConnDBLocked will satisfy a connRequest if there is one, or it will
+// putConnDBLocked will satisfy a connCreationResponse if there is one, or it will
 // return the *driverConn to the freeConn list if err == nil and the idle
 // connection limit will not be exceeded.
 // If err != nil, the value of dc is ignored.
 // If err == nil, then dc must not equal nil.
-// If a connRequest was fulfilled or the *driverConn was placed in the
+// If a connCreationResponse was fulfilled or the *driverConn was placed in the
 // freeConn list, then true is returned, otherwise false is returned.
 func (connPool *ConnPool) putConnDBLocked(dc *driverConn, err error) bool {
 	if connPool.closed {
 		return false
 	}
-	if connPool.maxOpen > 0 && connPool.numOpen > connPool.maxOpen {
+	if connPool.poolManager.isOpenConnectionLimitExceeded() {
 		return false
 	}
-	if c := len(connPool.connRequests); c > 0 {
-		var req chan connRequest
+	if c := len(connPool.poolManager.connRequests); c > 0 {
+		var req chan connCreationResponse
 		var reqKey uint64
-		for reqKey, req = range connPool.connRequests {
+		for reqKey, req = range connPool.poolManager.connRequests {
 			break
 		}
-		delete(connPool.connRequests, reqKey) // Remove from pending requests.
+		delete(connPool.poolManager.connRequests, reqKey) // Remove from pending requests.
 		if err == nil {
 			dc.inUse = true
 		}
-		req <- connRequest{
+		//TODO моя проверка
+		if req == nil {
+			fmt.Println("request is null")
+			return false
+		}
+		req <- connCreationResponse{
 			conn: dc,
 			err:  err,
 		}
@@ -2228,9 +2244,9 @@ func (tx *Tx) Prepare(query string) (*Stmt, error) {
 // an existing statement.
 //
 // Example:
-//  updateMoney, err := db.Prepare("UPDATE balance SET money=money+? WHERE id=?")
+//  updateMoney, err := connPool.Prepare("UPDATE balance SET money=money+? WHERE id=?")
 //  ...
-//  tx, err := db.Begin()
+//  tx, err := connPool.Begin()
 //  ...
 //  res, err := tx.StmtContext(ctx, updateMoney).Exec(123.45, 98293203)
 //
@@ -2315,9 +2331,9 @@ func (tx *Tx) StmtContext(ctx context.Context, stmt *Stmt) *Stmt {
 // an existing statement.
 //
 // Example:
-//  updateMoney, err := db.Prepare("UPDATE balance SET money=money+? WHERE id=?")
+//  updateMoney, err := connPool.Prepare("UPDATE balance SET money=money+? WHERE id=?")
 //  ...
-//  tx, err := db.Begin()
+//  tx, err := connPool.Begin()
 //  ...
 //  res, err := tx.Stmt(updateMoney).Exec(123.45, 98293203)
 //
@@ -2445,7 +2461,7 @@ type Stmt struct {
 	// connections. If cg != nil, cgds is always used.
 	css []connStmt
 
-	// lastNumClosed is copied from db.numClosed when Stmt is created
+	// lastNumClosed is copied from connPool.numClosed when Stmt is created
 	// without tx and closed connections in css are removed.
 	lastNumClosed uint64
 }
@@ -2504,7 +2520,7 @@ func resultFromStatement(ctx context.Context, ci driver.Conn, ds *driverStmt, ar
 // removeClosedStmtLocked removes closed conns in s.css.
 //
 // To avoid lock contention on ConnPool.mu, we do it only when
-// s.db.numClosed - s.lastNum is large enough.
+// s.connPool.numClosed - s.lastNum is large enough.
 func (s *Stmt) removeClosedStmtLocked() {
 	t := len(s.css)/2 + 1
 	if t > 10 {

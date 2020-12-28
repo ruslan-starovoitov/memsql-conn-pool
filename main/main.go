@@ -7,30 +7,40 @@ import (
 )
 
 var credentials = []pool.Credentials{
-	//{
-	//	Username: "root",
-	//	Password: "RootPass1",
-	//	Database: "hellomemsql",
-	//},
-	//{
-	//	Username: "user1",
-	//	Password: "pass1",
-	//	Database: "hellomemsql1",
-	//},
-	//{
-	//	Username: "user2",
-	//	Password: "pass2",
-	//	Database: "hellomemsql2",
-	//},
-	//{
-	//	Username: "user3",
-	//	Password: "pass3",
-	//	Database: "hellomemsql3",
-	//},
 	{
-		Username: "user9",
-		Password: "pass9",
-		Database: "hellomemsql7",
+		Username: "root",
+		Password: "RootPass1",
+		Database: "hellomemsql",
+	},
+	{
+		Username: "user1",
+		Password: "pass1",
+		Database: "hellomemsql1",
+	},
+	{
+		Username: "user2",
+		Password: "pass2",
+		Database: "hellomemsql1",
+	},
+	{
+		Username: "user3",
+		Password: "pass3",
+		Database: "hellomemsql1",
+	},
+	{
+		Username: "user4",
+		Password: "pass4",
+		Database: "hellomemsql2",
+	},
+	{
+		Username: "user5",
+		Password: "pass5",
+		Database: "hellomemsql2",
+	},
+	{
+		Username: "user6",
+		Password: "pass6",
+		Database: "hellomemsql2",
 	},
 }
 

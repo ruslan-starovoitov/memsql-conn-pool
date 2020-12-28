@@ -3,8 +3,8 @@ ROOT_PASSWORD_TEST=RootPass1
 
 test:
 	go get "github.com/orcaman/concurrent-map"
-	export LICENSE_KEY=${LICENSE_KEY_TEST}
-	export ROOT_PASSWORD=${ROOT_PASSWORD_TEST}
+#	export LICENSE_KEY=${LICENSE_KEY_TEST}
+#	export ROOT_PASSWORD=${ROOT_PASSWORD_TEST}
 	docker-compose up --force-recreate --detach
 #	go test
 #	docker-compose down

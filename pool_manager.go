@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+var unableToGetPool = errors.New("unable get pool from map")
+
+//PoolManager содержит хеш-таблицу пулов соединений. Он содержит
+//общие ограничения на количество соединений
 type PoolManager struct {
 	pools cmap.ConcurrentMap
 	ctx   context.Context
@@ -53,18 +57,12 @@ func (pm *PoolManager) ClosePool() {
 	pm.cancel()
 }
 
-func newConnPoolFromCredentials(credentials Credentials) (*sql.ConnPool, error) {
-	dsn := GetDataSourceName(credentials)
-	db, err := sql.Open("mysql", dsn)
-	return db, err
-}
-
-var unableToGetPool = errors.New("unable get pool from map")
-
 func (pm *PoolManager) getOrCreateConnPool(credentials Credentials) (*sql.ConnPool, error) {
 	//Create pool if not exists
 	if !pm.pools.Has(credentials.GetId()) {
-		connPool, err := newConnPoolFromCredentials(credentials)
+		dsn := GetDataSourceName(credentials)
+		//TODO заменить
+		connPool, err := sql.Open("mysql", dsn)
 		if err != nil {
 			return nil, err
 		}

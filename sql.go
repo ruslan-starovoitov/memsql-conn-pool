@@ -420,14 +420,15 @@ type ConnPool struct {
 	// maybeOpenNewConnections sends on the chan (one send per needed connection)
 	// It is closed during db.Close(). The close tells the connectionOpener
 	// goroutine to exit.
-	openerCh          chan struct{}
-	closed            bool
-	dep               map[finalCloser]depSet
-	lastPut           map[*driverConn]string // stacktrace of last conn's put; debug only
-	maxIdleCount      int                    // zero means defaultMaxIdleConns; negative means 0
-	maxOpen           int                    // <= 0 means unlimited
-	maxLifetime       time.Duration          // maximum amount of time a connection may be reused
-	maxIdleTime       time.Duration          // maximum amount of time a connection may be idle before being closed
+	openerCh     chan struct{}
+	closed       bool
+	dep          map[finalCloser]depSet
+	lastPut      map[*driverConn]string // stacktrace of last conn's put; debug only
+	maxIdleCount int                    // zero means defaultMaxIdleConns; negative means 0
+	//TODO unlimited
+	//maxOpen           int                    // <= 0 means unlimited
+	maxLifetime       time.Duration // maximum amount of time a connection may be reused
+	maxIdleTime       time.Duration // maximum amount of time a connection may be idle before being closed
 	cleanerCh         chan struct{}
 	waitCount         int64 // Total number of connections waited for.
 	maxIdleClosed     int64 // Total number of connections closed due to idle count.
@@ -447,7 +448,6 @@ const (
 	// for one to become available (if MaxOpenConns has been reached) or
 	// creates a new database connection.
 	cachedOrNewConn
-	cachedOrNewConnGlobal
 )
 
 // driverConn wraps a driver.Conn with a mutex, to
@@ -731,7 +731,8 @@ func (t dsnConnector) Driver() driver.Driver {
 // function should be called just once. It is rarely necessary to
 // close a ConnPool.
 func OpenDB(c driver.Connector) *ConnPool {
-	ctx, cancel := context.WithCancel(context.Background())
+	//ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	connPool := &ConnPool{
 		connector:    c,
 		openerCh:     make(chan struct{}, connectionRequestQueueSize),
@@ -740,7 +741,8 @@ func OpenDB(c driver.Connector) *ConnPool {
 		stop:         cancel,
 	}
 
-	go connPool.connectionOpener(ctx)
+	//TODO я заменил на globalConnectionOpener
+	//go connPool.connectionOpener(ctx)
 
 	return connPool
 }
@@ -1071,7 +1073,8 @@ func (connPool *ConnPool) connectionCleanerRunLocked() (closing []*driverConn) {
 
 // DBStats contains database statistics.
 type DBStats struct {
-	MaxOpenConnections int // Maximum number of open connections to the database.
+	//TODO unlimited
+	//MaxOpenConnections int // Maximum number of open connections to the database.
 
 	// Pool Status
 	OpenConnections int // The number of established connections both in use and idle.
@@ -1094,7 +1097,7 @@ func (connPool *ConnPool) Stats() DBStats {
 	defer connPool.mu.Unlock()
 
 	stats := DBStats{
-		MaxOpenConnections: connPool.maxOpen,
+		//MaxOpenConnections: connPool.maxOpen,
 
 		Idle:            len(connPool.freeConn),
 		OpenConnections: connPool.numOpen,
@@ -1132,19 +1135,20 @@ func (connPool *ConnPool) maybeOpenNewConnections() {
 	}
 }
 
-// Runs in a separate goroutine, opens new connections when requested.
-// TODO убрать запускается параллелльно с созданием нового пула
-func (connPool *ConnPool) connectionOpener(ctx context.Context) {
-	//ждём пока контекст закроется или попросят открыть новое соединение
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-connPool.openerCh:
-			connPool.openNewConnection(ctx)
-		}
-	}
-}
+//TODO я заменил на globalConnectionOpener
+//// Runs in a separate goroutine, opens new connections when requested.
+//// TODO изучить/ запускается параллелльно с созданием нового пула
+//func (connPool *ConnPool) connectionOpener(ctx context.Context) {
+//	//ждём пока контекст закроется или попросят открыть новое соединение
+//	for {
+//		select {
+//		case <-ctx.Done():
+//			return
+//		case <-connPool.openerCh:
+//			connPool.openNewConnection(ctx)
+//		}
+//	}
+//}
 
 //TODO метод создаёт новое соединение/ вызывается из connectionOpener горутины
 // Open one new connection
@@ -1203,11 +1207,13 @@ func (connPool *ConnPool) nextRequestKeyLocked() uint64 {
 
 // conn returns a newly-opened or cached *driverConn.
 func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn, error) {
+	// Check if the context is closed.
 	connPool.mu.Lock()
 	if connPool.closed {
 		connPool.mu.Unlock()
 		return nil, errDBClosed
 	}
+
 	// Check if the context is expired.
 	select {
 	default:
@@ -1220,10 +1226,16 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 	// Prefer a free connection, if possible.
 	numFree := len(connPool.freeConn)
 	if strategy == cachedOrNewConn && numFree > 0 {
+
+		//remove connection from free slice
 		conn := connPool.freeConn[0]
 		copy(connPool.freeConn, connPool.freeConn[1:])
 		connPool.freeConn = connPool.freeConn[:numFree-1]
+
+		//mark as isUse
 		conn.inUse = true
+
+		// Check if the driver connection is expired.
 		if conn.expired(lifetime) {
 			connPool.maxLifetimeClosed++
 			connPool.mu.Unlock()
@@ -1238,11 +1250,13 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 			return nil, driver.ErrBadConn
 		}
 
+		//Success. Found cached connection.
 		return conn, nil
 	}
 
 	// Out of free connections or we were asked not to use one. If we're not
 	// allowed to open any more connections, make a request and wait.
+	//if connPool.maxOpen > 0 && connPool.maxOpen <= connPool.numOpen {
 	if connPool.maxOpen > 0 && connPool.maxOpen <= connPool.numOpen {
 		// Make the connRequest channel. It's buffered so that the
 		// connectionOpener doesn't block while waiting for the req to be read.
@@ -1613,15 +1627,15 @@ func (connPool *ConnPool) QueryContext(ctx context.Context, query string, args .
 	var rows *Rows
 	var err error
 	for i := 0; i < maxBadConnRetries; i++ {
-		rows, err = connPool.query(ctx, query, args, cachedOrNewConnGlobal)
+		rows, err = connPool.query(ctx, query, args, cachedOrNewConn)
 		if err != driver.ErrBadConn {
 			break
 		}
 	}
-	//TODO разобрать что с этим делать
-	//if err == driver.ErrBadConn {
-	//	return connPool.query(ctx, query, args, alwaysNewConn)
-	//}
+
+	if err == driver.ErrBadConn {
+		return connPool.query(ctx, query, args, alwaysNewConn)
+	}
 	return rows, err
 }
 

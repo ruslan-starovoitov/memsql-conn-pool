@@ -16,8 +16,8 @@ import (
 	"fmt"
 	"log"
 	"math"
+	cpool "memsql-conn-pool"
 	"memsql-conn-pool/driver"
-	"memsql-conn-pool/sql"
 	"net"
 	"net/url"
 	"os"
@@ -81,7 +81,7 @@ func init() {
 
 type DBTest struct {
 	*testing.T
-	db *sql.ConnPool
+	db *cpool.ConnPool
 }
 
 type netErrorMock struct {
@@ -107,9 +107,9 @@ func runTestsWithMultiStatement(t *testing.T, dsn string, tests ...func(dbt *DBT
 	}
 
 	dsn += "&multiStatements=true"
-	var db *sql.ConnPool
+	var db *cpool.ConnPool
 	if _, err := ParseDSN(dsn); err != errInvalidDSNUnsafeCollation {
-		db, err = sql.Open("mysql", dsn)
+		db, err = cpool.Open("mysql", dsn)
 		if err != nil {
 			t.Fatalf("error connecting: %s", err.Error())
 		}
@@ -128,7 +128,7 @@ func runTests(t *testing.T, dsn string, tests ...func(dbt *DBTest)) {
 		t.Skipf("MySQL server not running on %s", netAddr)
 	}
 
-	db, err := sql.Open("mysql", dsn)
+	db, err := cpool.Open("mysql", dsn)
 	if err != nil {
 		t.Fatalf("error connecting: %s", err.Error())
 	}
@@ -137,9 +137,9 @@ func runTests(t *testing.T, dsn string, tests ...func(dbt *DBTest)) {
 	db.Exec("DROP TABLE IF EXISTS test")
 
 	dsn2 := dsn + "&interpolateParams=true"
-	var db2 *sql.ConnPool
+	var db2 *cpool.ConnPool
 	if _, err := ParseDSN(dsn2); err != errInvalidDSNUnsafeCollation {
-		db2, err = sql.Open("mysql", dsn2)
+		db2, err = cpool.Open("mysql", dsn2)
 		if err != nil {
 			t.Fatalf("error connecting: %s", err.Error())
 		}
@@ -147,9 +147,9 @@ func runTests(t *testing.T, dsn string, tests ...func(dbt *DBTest)) {
 	}
 
 	dsn3 := dsn + "&multiStatements=true"
-	var db3 *sql.ConnPool
+	var db3 *cpool.ConnPool
 	if _, err := ParseDSN(dsn3); err != errInvalidDSNUnsafeCollation {
-		db3, err = sql.Open("mysql", dsn3)
+		db3, err = cpool.Open("mysql", dsn3)
 		if err != nil {
 			t.Fatalf("error connecting: %s", err.Error())
 		}
@@ -180,7 +180,7 @@ func (dbt *DBTest) fail(method, query string, err error) {
 	dbt.Fatalf("error on %s %s: %s", method, query, err.Error())
 }
 
-func (dbt *DBTest) mustExec(query string, args ...interface{}) (res sql.Result) {
+func (dbt *DBTest) mustExec(query string, args ...interface{}) (res cpool.Result) {
 	res, err := dbt.db.Exec(query, args...)
 	if err != nil {
 		dbt.fail("exec", query, err)
@@ -188,7 +188,7 @@ func (dbt *DBTest) mustExec(query string, args ...interface{}) (res sql.Result) 
 	return res
 }
 
-func (dbt *DBTest) mustQuery(query string, args ...interface{}) (rows *sql.Rows) {
+func (dbt *DBTest) mustQuery(query string, args ...interface{}) (rows *cpool.Rows) {
 	rows, err := dbt.db.Query(query, args...)
 	if err != nil {
 		dbt.fail("query", query, err)
@@ -413,7 +413,7 @@ func TestFloat32(t *testing.T) {
 		types := [2]string{"FLOAT", "DOUBLE"}
 		in := float32(42.23)
 		var out float32
-		var rows *sql.Rows
+		var rows *cpool.Rows
 		for _, v := range types {
 			dbt.mustExec("CREATE TABLE test (value " + v + ")")
 			dbt.mustExec("INSERT INTO test VALUES (?)", in)
@@ -437,7 +437,7 @@ func TestFloat64(t *testing.T) {
 		types := [2]string{"FLOAT", "DOUBLE"}
 		var expected float64 = 42.23
 		var out float64
-		var rows *sql.Rows
+		var rows *cpool.Rows
 		for _, v := range types {
 			dbt.mustExec("CREATE TABLE test (value " + v + ")")
 			dbt.mustExec("INSERT INTO test VALUES (42.23)")
@@ -461,7 +461,7 @@ func TestFloat64Placeholder(t *testing.T) {
 		types := [2]string{"FLOAT", "DOUBLE"}
 		var expected float64 = 42.23
 		var out float64
-		var rows *sql.Rows
+		var rows *cpool.Rows
 		for _, v := range types {
 			dbt.mustExec("CREATE TABLE test (id int, value " + v + ")")
 			dbt.mustExec("INSERT INTO test VALUES (1, 42.23)")
@@ -485,7 +485,7 @@ func TestString(t *testing.T) {
 		types := [6]string{"CHAR(255)", "VARCHAR(255)", "TINYTEXT", "TEXT", "MEDIUMTEXT", "LONGTEXT"}
 		in := "κόσμε üöäßñóùéàâÿœ'îë Árvíztűrő いろはにほへとちりぬるを イロハニホヘト דג סקרן чащах  น่าฟังเอย"
 		var out string
-		var rows *sql.Rows
+		var rows *cpool.Rows
 
 		for _, v := range types {
 			dbt.mustExec("CREATE TABLE test (value " + v + ") CHARACTER SET utf8")
@@ -536,7 +536,7 @@ func TestRawBytes(t *testing.T) {
 		rows := dbt.mustQuery("SELECT ?, ?", v1, v2)
 		defer rows.Close()
 		if rows.Next() {
-			var o1, o2 sql.RawBytes
+			var o1, o2 cpool.RawBytes
 			if err := rows.Scan(&o1, &o2); err != nil {
 				dbt.Errorf("Got error: %v", err)
 			}
@@ -593,7 +593,7 @@ func TestValuer(t *testing.T) {
 	runTests(t, dsn, func(dbt *DBTest) {
 		in := testValuer{"a_value"}
 		var out string
-		var rows *sql.Rows
+		var rows *cpool.Rows
 
 		dbt.mustExec("CREATE TABLE test (value VARCHAR(255)) CHARACTER SET utf8")
 		dbt.mustExec("INSERT INTO test VALUES (?)", in)
@@ -628,7 +628,7 @@ func TestValuerWithValidation(t *testing.T) {
 	runTests(t, dsn, func(dbt *DBTest) {
 		in := testValuerWithValidation{"a_value"}
 		var out string
-		var rows *sql.Rows
+		var rows *cpool.Rows
 
 		dbt.mustExec("CREATE TABLE testValuer (value VARCHAR(255)) CHARACTER SET utf8")
 		dbt.mustExec("INSERT INTO testValuer VALUES (?)", in)
@@ -711,7 +711,7 @@ func (t timeTest) genQuery(dbtype string, mode timeMode) string {
 }
 
 func (t timeTest) run(dbt *DBTest, dbtype, tlayout string, mode timeMode) {
-	var rows *sql.Rows
+	var rows *cpool.Rows
 	query := t.genQuery(dbtype, mode)
 	switch mode {
 	case binaryString:
@@ -843,7 +843,7 @@ func TestDateTime(t *testing.T) {
 		runTests(t, testdsn, func(dbt *DBTest) {
 			microsecsSupported := false
 			zeroDateSupported := false
-			var rows *sql.Rows
+			var rows *cpool.Rows
 			var err error
 			rows, err = dbt.db.Query(`SELECT cast("00:00:00.1" as TIME(1)) = "00:00:00.1"`)
 			if err == nil {
@@ -954,7 +954,7 @@ func TestNULL(t *testing.T) {
 		defer nonNullStmt.Close()
 
 		// NullBool
-		var nb sql.NullBool
+		var nb cpool.NullBool
 		// Invalid
 		if err = nullStmt.QueryRow().Scan(&nb); err != nil {
 			dbt.Fatal(err)
@@ -973,7 +973,7 @@ func TestNULL(t *testing.T) {
 		}
 
 		// NullFloat64
-		var nf sql.NullFloat64
+		var nf cpool.NullFloat64
 		// Invalid
 		if err = nullStmt.QueryRow().Scan(&nf); err != nil {
 			dbt.Fatal(err)
@@ -992,7 +992,7 @@ func TestNULL(t *testing.T) {
 		}
 
 		// NullInt64
-		var ni sql.NullInt64
+		var ni cpool.NullInt64
 		// Invalid
 		if err = nullStmt.QueryRow().Scan(&ni); err != nil {
 			dbt.Fatal(err)
@@ -1011,7 +1011,7 @@ func TestNULL(t *testing.T) {
 		}
 
 		// NullString
-		var ns sql.NullString
+		var ns cpool.NullString
 		// Invalid
 		if err = nullStmt.QueryRow().Scan(&ns); err != nil {
 			dbt.Fatal(err)
@@ -1151,7 +1151,7 @@ func TestLongData(t *testing.T) {
 
 		in := strings.Repeat(`a`, maxAllowedPacketSize+1)
 		var out string
-		var rows *sql.Rows
+		var rows *cpool.Rows
 
 		// Long text data
 		const nonDataQueryLen = 28 // length query w/o value
@@ -1355,7 +1355,7 @@ func TestTLS(t *testing.T) {
 		rows := dbt.mustQuery("SHOW STATUS LIKE 'Ssl_cipher'")
 		defer rows.Close()
 
-		var variable, value *sql.RawBytes
+		var variable, value *cpool.RawBytes
 		for rows.Next() {
 			if err := rows.Scan(&variable, &value); err != nil {
 				dbt.Fatal(err.Error())
@@ -1539,7 +1539,7 @@ func TestRawBytesResultExceedsBuffer(t *testing.T) {
 		if !rows.Next() {
 			dbt.Error("expected result, got none")
 		}
-		var result sql.RawBytes
+		var result cpool.RawBytes
 		rows.Scan(&result)
 		if expected != string(result) {
 			dbt.Error("result did not match expected value")
@@ -1874,7 +1874,7 @@ func testDialError(t *testing.T, dialErr error, expectErr error) {
 		return nil, dialErr
 	})
 
-	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@mydial(%s)/%s?timeout=30s", user, pass, addr, dbname))
+	db, err := cpool.Open("mysql", fmt.Sprintf("%s:%s@mydial(%s)/%s?timeout=30s", user, pass, addr, dbname))
 	if err != nil {
 		t.Fatalf("error connecting: %s", err.Error())
 	}
@@ -1934,7 +1934,7 @@ func TestSQLInjection(t *testing.T) {
 			// NULL can't be equal to anything, the idea here is to inject query so it returns row
 			// This test verifies that escapeQuotes and escapeBackslash are working properly
 			err := dbt.db.QueryRow("SELECT v FROM test WHERE NULL = ?", arg).Scan(&v)
-			if err == sql.ErrNoRows {
+			if err == cpool.ErrNoRows {
 				return // success, sql injection failed
 			} else if err == nil {
 				dbt.Errorf("sql injection successful with arg: %s", arg)
@@ -2011,7 +2011,7 @@ func TestUnixSocketAuthFail(t *testing.T) {
 		}
 		t.Logf("socket: %s", socket)
 		badDSN := fmt.Sprintf("%s:%s@unix(%s)/%s?timeout=30s", user, badPass, socket, dbname)
-		db, err := sql.Open("mysql", badDSN)
+		db, err := cpool.Open("mysql", badDSN)
 		if err != nil {
 			t.Fatalf("error connecting: %s", err.Error())
 		}
@@ -2160,7 +2160,7 @@ func TestEmptyPassword(t *testing.T) {
 	}
 
 	dsn := fmt.Sprintf("%s:%s@%s/%s?timeout=30s", user, "", netAddr, dbname)
-	db, err := sql.Open("mysql", dsn)
+	db, err := cpool.Open("mysql", dsn)
 	if err == nil {
 		defer db.Close()
 		err = db.Ping()
@@ -2226,7 +2226,7 @@ func TestMultiResultSet(t *testing.T) {
 	//
 	// to distinguish test cases the first string argument is put in front of
 	// every error or fatal message.
-	checkRows := func(desc string, rows *sql.Rows, dbt *DBTest) {
+	checkRows := func(desc string, rows *cpool.Rows, dbt *DBTest) {
 		expected := []result{
 			{
 				values:  [][]int{{1, 2}, {3, 4}},
@@ -2632,7 +2632,7 @@ func TestContextCancelBegin(t *testing.T) {
 
 		// Transaction is canceled, so expect an error.
 		switch err := tx.Commit(); err {
-		case sql.ErrTxDone:
+		case cpool.ErrTxDone:
 			// because the transaction has already been rollbacked.
 			// the database/sql package watches ctx
 			// and rollbacks when ctx is canceled.
@@ -2640,7 +2640,7 @@ func TestContextCancelBegin(t *testing.T) {
 			// the database/sql package rollbacks on another goroutine,
 			// so the transaction may not be rollbacked depending on goroutine scheduling.
 		default:
-			dbt.Errorf("expected sql.ErrTxDone or context.Canceled, got %v", err)
+			dbt.Errorf("expected cpool.ErrTxDone or context.Canceled, got %v", err)
 		}
 
 		// The connection is now in an inoperable state - so performing other
@@ -2648,7 +2648,7 @@ func TestContextCancelBegin(t *testing.T) {
 		// Important to exercise isolation level too - it runs SET TRANSACTION ISOLATION
 		// LEVEL XXX first, which needs to return ErrBadConn if the connection's context
 		// is cancelled
-		_, err = conn.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+		_, err = conn.BeginTx(context.Background(), &cpool.TxOptions{Isolation: cpool.LevelReadCommitted})
 		if err != driver.ErrBadConn {
 			dbt.Errorf("expected driver.ErrBadConn, got %v", err)
 		}
@@ -2666,15 +2666,15 @@ func TestContextBeginIsolationLevel(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		tx1, err := dbt.db.BeginTx(ctx, &sql.TxOptions{
-			Isolation: sql.LevelRepeatableRead,
+		tx1, err := dbt.db.BeginTx(ctx, &cpool.TxOptions{
+			Isolation: cpool.LevelRepeatableRead,
 		})
 		if err != nil {
 			dbt.Fatal(err)
 		}
 
-		tx2, err := dbt.db.BeginTx(ctx, &sql.TxOptions{
-			Isolation: sql.LevelReadCommitted,
+		tx2, err := dbt.db.BeginTx(ctx, &cpool.TxOptions{
+			Isolation: cpool.LevelReadCommitted,
 		})
 		if err != nil {
 			dbt.Fatal(err)
@@ -2718,7 +2718,7 @@ func TestContextBeginReadOnly(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		tx, err := dbt.db.BeginTx(ctx, &sql.TxOptions{
+		tx, err := dbt.db.BeginTx(ctx, &cpool.TxOptions{
 			ReadOnly: true,
 		})
 		if _, ok := err.(*MySQLError); ok {
@@ -2751,13 +2751,13 @@ func TestContextBeginReadOnly(t *testing.T) {
 }
 
 func TestRowsColumnTypes(t *testing.T) {
-	niNULL := sql.NullInt64{Int64: 0, Valid: false}
-	ni0 := sql.NullInt64{Int64: 0, Valid: true}
-	ni1 := sql.NullInt64{Int64: 1, Valid: true}
-	ni42 := sql.NullInt64{Int64: 42, Valid: true}
-	nfNULL := sql.NullFloat64{Float64: 0.0, Valid: false}
-	nf0 := sql.NullFloat64{Float64: 0.0, Valid: true}
-	nf1337 := sql.NullFloat64{Float64: 13.37, Valid: true}
+	niNULL := cpool.NullInt64{Int64: 0, Valid: false}
+	ni0 := cpool.NullInt64{Int64: 0, Valid: true}
+	ni1 := cpool.NullInt64{Int64: 1, Valid: true}
+	ni42 := cpool.NullInt64{Int64: 42, Valid: true}
+	nfNULL := cpool.NullFloat64{Float64: 0.0, Valid: false}
+	nf0 := cpool.NullFloat64{Float64: 0.0, Valid: true}
+	nf1337 := cpool.NullFloat64{Float64: 13.37, Valid: true}
 	nt0 := nullTime{Time: time.Date(2006, 01, 02, 15, 04, 05, 0, time.UTC), Valid: true}
 	nt1 := nullTime{Time: time.Date(2006, 01, 02, 15, 04, 05, 100000000, time.UTC), Valid: true}
 	nt2 := nullTime{Time: time.Date(2006, 01, 02, 15, 04, 05, 110000000, time.UTC), Valid: true}
@@ -2765,13 +2765,13 @@ func TestRowsColumnTypes(t *testing.T) {
 	nd1 := nullTime{Time: time.Date(2006, 01, 02, 0, 0, 0, 0, time.UTC), Valid: true}
 	nd2 := nullTime{Time: time.Date(2006, 03, 04, 0, 0, 0, 0, time.UTC), Valid: true}
 	ndNULL := nullTime{Time: time.Time{}, Valid: false}
-	rbNULL := sql.RawBytes(nil)
-	rb0 := sql.RawBytes("0")
-	rb42 := sql.RawBytes("42")
-	rbTest := sql.RawBytes("Test")
-	rb0pad4 := sql.RawBytes("0\x00\x00\x00") // BINARY right-pads values with 0x00
-	rbx0 := sql.RawBytes("\x00")
-	rbx42 := sql.RawBytes("\x42")
+	rbNULL := cpool.RawBytes(nil)
+	rb0 := cpool.RawBytes("0")
+	rb42 := cpool.RawBytes("42")
+	rbTest := cpool.RawBytes("Test")
+	rb0pad4 := cpool.RawBytes("0\x00\x00\x00") // BINARY right-pads values with 0x00
+	rbx0 := cpool.RawBytes("\x00")
+	rbx42 := cpool.RawBytes("\x42")
 
 	var columns = []struct {
 		name             string
@@ -2804,12 +2804,12 @@ func TestRowsColumnTypes(t *testing.T) {
 		{"float74null", "FLOAT(7,4)", "FLOAT", scanTypeNullFloat, true, math.MaxInt64, 4, [3]string{"0", "NULL", "13.37"}, [3]interface{}{nf0, nfNULL, nf1337}},
 		{"double", "DOUBLE NOT NULL", "DOUBLE", scanTypeFloat64, false, math.MaxInt64, math.MaxInt64, [3]string{"0", "42", "13.37"}, [3]interface{}{float64(0), float64(42), float64(13.37)}},
 		{"doublenull", "DOUBLE", "DOUBLE", scanTypeNullFloat, true, math.MaxInt64, math.MaxInt64, [3]string{"0", "NULL", "13.37"}, [3]interface{}{nf0, nfNULL, nf1337}},
-		{"decimal1", "DECIMAL(10,6) NOT NULL", "DECIMAL", scanTypeRawBytes, false, 10, 6, [3]string{"0", "13.37", "1234.123456"}, [3]interface{}{sql.RawBytes("0.000000"), sql.RawBytes("13.370000"), sql.RawBytes("1234.123456")}},
-		{"decimal1null", "DECIMAL(10,6)", "DECIMAL", scanTypeRawBytes, true, 10, 6, [3]string{"0", "NULL", "1234.123456"}, [3]interface{}{sql.RawBytes("0.000000"), rbNULL, sql.RawBytes("1234.123456")}},
-		{"decimal2", "DECIMAL(8,4) NOT NULL", "DECIMAL", scanTypeRawBytes, false, 8, 4, [3]string{"0", "13.37", "1234.123456"}, [3]interface{}{sql.RawBytes("0.0000"), sql.RawBytes("13.3700"), sql.RawBytes("1234.1235")}},
-		{"decimal2null", "DECIMAL(8,4)", "DECIMAL", scanTypeRawBytes, true, 8, 4, [3]string{"0", "NULL", "1234.123456"}, [3]interface{}{sql.RawBytes("0.0000"), rbNULL, sql.RawBytes("1234.1235")}},
-		{"decimal3", "DECIMAL(5,0) NOT NULL", "DECIMAL", scanTypeRawBytes, false, 5, 0, [3]string{"0", "13.37", "-12345.123456"}, [3]interface{}{rb0, sql.RawBytes("13"), sql.RawBytes("-12345")}},
-		{"decimal3null", "DECIMAL(5,0)", "DECIMAL", scanTypeRawBytes, true, 5, 0, [3]string{"0", "NULL", "-12345.123456"}, [3]interface{}{rb0, rbNULL, sql.RawBytes("-12345")}},
+		{"decimal1", "DECIMAL(10,6) NOT NULL", "DECIMAL", scanTypeRawBytes, false, 10, 6, [3]string{"0", "13.37", "1234.123456"}, [3]interface{}{cpool.RawBytes("0.000000"), cpool.RawBytes("13.370000"), cpool.RawBytes("1234.123456")}},
+		{"decimal1null", "DECIMAL(10,6)", "DECIMAL", scanTypeRawBytes, true, 10, 6, [3]string{"0", "NULL", "1234.123456"}, [3]interface{}{cpool.RawBytes("0.000000"), rbNULL, cpool.RawBytes("1234.123456")}},
+		{"decimal2", "DECIMAL(8,4) NOT NULL", "DECIMAL", scanTypeRawBytes, false, 8, 4, [3]string{"0", "13.37", "1234.123456"}, [3]interface{}{cpool.RawBytes("0.0000"), cpool.RawBytes("13.3700"), cpool.RawBytes("1234.1235")}},
+		{"decimal2null", "DECIMAL(8,4)", "DECIMAL", scanTypeRawBytes, true, 8, 4, [3]string{"0", "NULL", "1234.123456"}, [3]interface{}{cpool.RawBytes("0.0000"), rbNULL, cpool.RawBytes("1234.1235")}},
+		{"decimal3", "DECIMAL(5,0) NOT NULL", "DECIMAL", scanTypeRawBytes, false, 5, 0, [3]string{"0", "13.37", "-12345.123456"}, [3]interface{}{rb0, cpool.RawBytes("13"), cpool.RawBytes("-12345")}},
+		{"decimal3null", "DECIMAL(5,0)", "DECIMAL", scanTypeRawBytes, true, 5, 0, [3]string{"0", "NULL", "-12345.123456"}, [3]interface{}{rb0, rbNULL, cpool.RawBytes("-12345")}},
 		{"char25null", "CHAR(25)", "CHAR", scanTypeRawBytes, true, 0, 0, [3]string{"0", "NULL", "'Test'"}, [3]interface{}{rb0, rbNULL, rbTest}},
 		{"varchar42", "VARCHAR(42) NOT NULL", "VARCHAR", scanTypeRawBytes, false, 0, 0, [3]string{"0", "'Test'", "42"}, [3]interface{}{rb0, rbTest, rb42}},
 		{"binary4null", "BINARY(4)", "BINARY", scanTypeRawBytes, true, 0, 0, [3]string{"0", "NULL", "'Test'"}, [3]interface{}{rb0pad4, rbNULL, rbTest}},
@@ -2947,7 +2947,7 @@ func TestRowsColumnTypes(t *testing.T) {
 				value := reflect.ValueOf(values[j]).Elem().Interface()
 				if !reflect.DeepEqual(value, columns[j].valuesOut[i]) {
 					if columns[j].scanType == scanTypeRawBytes {
-						t.Errorf("row %d, column %d: %v != %v", i, j, string(value.(sql.RawBytes)), string(columns[j].valuesOut[i].(sql.RawBytes)))
+						t.Errorf("row %d, column %d: %v != %v", i, j, string(value.(cpool.RawBytes)), string(columns[j].valuesOut[i].(cpool.RawBytes)))
 					} else {
 						t.Errorf("row %d, column %d: %v != %v", i, j, value, columns[j].valuesOut[i])
 					}
@@ -3006,7 +3006,7 @@ func TestRawBytesAreNotModified(t *testing.T) {
 				}
 
 				var b int
-				var raw sql.RawBytes
+				var raw cpool.RawBytes
 				for rows.Next() {
 					if err := rows.Scan(&b, &raw); err != nil {
 						t.Fatal(err)
@@ -3019,7 +3019,7 @@ func TestRawBytesAreNotModified(t *testing.T) {
 					after := string(raw)
 
 					if before != after {
-						t.Fatalf("the backing storage for sql.RawBytes has been modified (i=%v)", i)
+						t.Fatalf("the backing storage for cpool.RawBytes has been modified (i=%v)", i)
 					}
 				}
 				rows.Close()
@@ -3045,7 +3045,7 @@ func TestConnectorObeysDialTimeouts(t *testing.T) {
 		return d.DialContext(ctx, prot, addr)
 	})
 
-	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@dialctxtest(%s)/%s?timeout=30s", user, pass, addr, dbname))
+	db, err := cpool.Open("mysql", fmt.Sprintf("%s:%s@dialctxtest(%s)/%s?timeout=30s", user, pass, addr, dbname))
 	if err != nil {
 		t.Fatalf("error connecting: %s", err.Error())
 	}
@@ -3080,7 +3080,7 @@ func TestNewConnector(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db := sql.OpenDB(conn)
+	db := cpool.OpenDB(conn)
 	defer db.Close()
 
 	if err := db.Ping(); err != nil {
@@ -3129,7 +3129,7 @@ func TestConnectorTimeoutsDuringOpen(t *testing.T) {
 
 	hijack := &connectorHijack{Connector: conn}
 
-	db := sql.OpenDB(hijack)
+	db := cpool.OpenDB(hijack)
 	defer db.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -3178,7 +3178,7 @@ func TestConnectorTimeoutsWatchCancel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db := sql.OpenDB(conn)
+	db := cpool.OpenDB(conn)
 	defer db.Close()
 
 	var ctx context.Context

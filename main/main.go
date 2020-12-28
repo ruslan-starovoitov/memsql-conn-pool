@@ -1,12 +1,12 @@
 package main
 
 import (
-	pool "memsql-conn-pool"
+	cpool "memsql-conn-pool"
 	"sync"
 	"time"
 )
 
-var credentials = []pool.Credentials{
+var credentials = []cpool.Credentials{
 	{
 		Username: "root",
 		Password: "RootPass1",
@@ -46,7 +46,7 @@ var credentials = []pool.Credentials{
 
 func main() {
 	println("start")
-	connPool := pool.NewPool(100, time.Minute)
+	connPool := cpool.NewPool(100, time.Minute)
 	seeder := seeder{}
 	reader := reader{}
 	wg := sync.WaitGroup{}

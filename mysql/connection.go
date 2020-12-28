@@ -12,8 +12,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"memsql-conn-pool/sql"
-	"memsql-conn-pool/sql/driver"
+	cpool "memsql-conn-pool"
+	"memsql-conn-pool/driver"
 	"net"
 	"strconv"
 	"strings"
@@ -478,7 +478,7 @@ func (mc *mysqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver
 	}
 	defer mc.finish()
 
-	if sql.IsolationLevel(opts.Isolation) != sql.LevelDefault {
+	if cpool.IsolationLevel(opts.Isolation) != cpool.LevelDefault {
 		level, err := mapIsolationLevel(opts.Isolation)
 		if err != nil {
 			return nil, err

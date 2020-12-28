@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package sql
+package memsql_conn_pool
 
 import (
 	"fmt"
-	"memsql-conn-pool/sql/driver"
+	"memsql-conn-pool/driver"
 	"reflect"
 	"runtime"
 	"strings"
@@ -180,7 +180,7 @@ func conversionTests() []conversionTest {
 		{s: 1.5, d: new(userDefined), wantusrdef: 1.5},
 		{s: int64(123), d: new(userDefined), wantusrdef: 123},
 		{s: "1.5", d: new(userDefined), wantusrdef: 1.5},
-		{s: []byte{1, 2, 3}, d: new(userDefinedSlice), wanterr: `unsupported Scan, storing driver.Value type []uint8 into type *sql.userDefinedSlice`},
+		{s: []byte{1, 2, 3}, d: new(userDefinedSlice), wanterr: `unsupported Scan, storing driver.Value type []uint8 into type *cpool.userDefinedSlice`},
 		{s: "str", d: new(userDefinedString), wantusrstr: "str"},
 
 		// Other errors

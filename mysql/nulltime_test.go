@@ -9,8 +9,8 @@
 package mysql
 
 import (
+	cpool "memsql-conn-pool"
 	"memsql-conn-pool/driver"
-	"memsql-conn-pool/sql"
 	"testing"
 	"time"
 )
@@ -18,7 +18,7 @@ import (
 var (
 	// Check implementation of interfaces
 	_ driver.Valuer = NullTime{}
-	_ sql.Scanner   = (*NullTime)(nil)
+	_ cpool.Scanner = (*NullTime)(nil)
 )
 
 func TestScanNullTime(t *testing.T) {

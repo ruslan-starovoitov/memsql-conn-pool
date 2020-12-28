@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"github.com/orcaman/concurrent-map"
-	"memsql-conn-pool/sql"
 	"time"
 )
 
@@ -25,7 +24,7 @@ type PoolManager struct {
 	releasedChan chan struct{}
 }
 
-func (pm *PoolManager) Query(credentials Credentials, sql string) (*sql.Rows, error) {
+func (pm *PoolManager) Query(credentials Credentials, sql string) (*Rows, error) {
 	connPool, err := pm.getOrCreateConnPool(credentials)
 	if err != nil {
 		return nil, err
@@ -39,7 +38,7 @@ func (pm *PoolManager) Query(credentials Credentials, sql string) (*sql.Rows, er
 	return rows, nil
 }
 
-func (pm *PoolManager) Exec(credentials Credentials, sql string) (sql.Result, error) {
+func (pm *PoolManager) Exec(credentials Credentials, sql string) (Result, error) {
 	connPool, err := pm.getOrCreateConnPool(credentials)
 	if err != nil {
 		return nil, err
@@ -57,12 +56,12 @@ func (pm *PoolManager) ClosePool() {
 	pm.cancel()
 }
 
-func (pm *PoolManager) getOrCreateConnPool(credentials Credentials) (*sql.ConnPool, error) {
+func (pm *PoolManager) getOrCreateConnPool(credentials Credentials) (*ConnPool, error) {
 	//Create pool if not exists
 	if !pm.pools.Has(credentials.GetId()) {
 		dsn := GetDataSourceName(credentials)
-		//TODO заменить
-		connPool, err := sql.Open("mysql", dsn)
+		//TODO заменить название драйвера
+		connPool, err := Open("mysql", dsn)
 		if err != nil {
 			return nil, err
 		}
@@ -71,7 +70,7 @@ func (pm *PoolManager) getOrCreateConnPool(credentials Credentials) (*sql.ConnPo
 	}
 	//Return pool if exists
 	if tmp, ok := pm.pools.Get(credentials.GetId()); ok {
-		return tmp.(*sql.ConnPool), nil
+		return tmp.(*ConnPool), nil
 	}
 	return nil, unableToGetPool
 }

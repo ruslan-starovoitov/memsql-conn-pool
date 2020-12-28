@@ -14,8 +14,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"memsql-conn-pool/sql"
-	"memsql-conn-pool/sql/driver"
+	cpool "memsql-conn-pool"
+	"memsql-conn-pool/driver"
 	"strconv"
 	"strings"
 	"sync"
@@ -844,14 +844,14 @@ func namedValueToValue(named []driver.NamedValue) ([]driver.Value, error) {
 }
 
 func mapIsolationLevel(level driver.IsolationLevel) (string, error) {
-	switch sql.IsolationLevel(level) {
-	case sql.LevelRepeatableRead:
+	switch cpool.IsolationLevel(level) {
+	case cpool.LevelRepeatableRead:
 		return "REPEATABLE READ", nil
-	case sql.LevelReadCommitted:
+	case cpool.LevelReadCommitted:
 		return "READ COMMITTED", nil
-	case sql.LevelReadUncommitted:
+	case cpool.LevelReadUncommitted:
 		return "READ UNCOMMITTED", nil
-	case sql.LevelSerializable:
+	case cpool.LevelSerializable:
 		return "SERIALIZABLE", nil
 	default:
 		return "", fmt.Errorf("mysql: unsupported isolation level: %v", level)

@@ -2,22 +2,22 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package sql_test
+package memsql_conn_pool_test
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	cpool "memsql-conn-pool"
 	"net/http"
 	"time"
 )
 
 func Example_openDBService() {
 	// Opening a driver typically will not attempt to connect to the database.
-	db, err := sql.Open("driver-name", "database=test1")
+	db, err := cpool.Open("driver-name", "database=test1")
 	if err != nil {
 		// This will not be a connection error, but a DSN parse error or
 		// another initialization error.
@@ -33,7 +33,7 @@ func Example_openDBService() {
 }
 
 type Service struct {
-	db *sql.DB
+	db *cpool.ConnPool
 }
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -72,11 +72,11 @@ where
 	p.id = :id
 	and o.id = :org
 ;`,
-			sql.Named("id", id),
-			sql.Named("org", org),
+			cpool.Named("id", id),
+			cpool.Named("org", org),
 		).Scan(&name)
 		if err != nil {
-			if err == sql.ErrNoRows {
+			if err == cpool.ErrNoRows {
 				http.Error(w, "not found", http.StatusNotFound)
 				return
 			}
@@ -139,7 +139,7 @@ where
 		defer cancel()
 
 		var orderRef = "ABC123"
-		tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+		tx, err := db.BeginTx(ctx, &cpool.TxOptions{Isolation: cpool.LevelSerializable})
 		_, err = tx.ExecContext(ctx, "stored_proc_name", orderRef)
 
 		if err != nil {

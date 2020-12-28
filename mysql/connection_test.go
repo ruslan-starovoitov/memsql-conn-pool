@@ -12,7 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"memsql-conn-pool/sql/driver"
+	"memsql-conn-pool/driver"
 	"net"
 	"testing"
 )

@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package sql
+package memsql_conn_pool
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"math/rand"
-	"memsql-conn-pool/sql/driver"
+	"memsql-conn-pool/driver"
 	"reflect"
 	"runtime"
 	"strings"
@@ -190,18 +190,18 @@ func numPrepares(t *testing.T, db *ConnPool) int {
 	return db.freeConn[0].ci.(*fakeConn).numPrepare
 }
 
-func (db *ConnPool) numDeps() int {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	return len(db.dep)
+func (connPool *ConnPool) numDeps() int {
+	connPool.mu.Lock()
+	defer connPool.mu.Unlock()
+	return len(connPool.dep)
 }
 
 // Dependencies are closed via a goroutine, so this polls waiting for
 // numDeps to fall to want, waiting up to d.
-func (db *ConnPool) numDepsPollUntil(want int, d time.Duration) int {
+func (connPool *ConnPool) numDepsPollUntil(want int, d time.Duration) int {
 	deadline := time.Now().Add(d)
 	for {
-		n := db.numDeps()
+		n := connPool.numDeps()
 		if n <= want || time.Now().After(deadline) {
 			return n
 		}
@@ -209,47 +209,47 @@ func (db *ConnPool) numDepsPollUntil(want int, d time.Duration) int {
 	}
 }
 
-func (db *ConnPool) numFreeConns() int {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	return len(db.freeConn)
+func (connPool *ConnPool) numFreeConns() int {
+	connPool.mu.Lock()
+	defer connPool.mu.Unlock()
+	return len(connPool.freeConn)
 }
 
-func (db *ConnPool) numOpenConns() int {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	return db.numOpen
+func (connPool *ConnPool) numOpenConns() int {
+	connPool.mu.Lock()
+	defer connPool.mu.Unlock()
+	return connPool.numOpen
 }
 
 // clearAllConns closes all connections in db.
-func (db *ConnPool) clearAllConns(t *testing.T) {
-	db.SetMaxIdleConns(0)
+func (connPool *ConnPool) clearAllConns(t *testing.T) {
+	connPool.SetMaxIdleConns(0)
 
-	if g, w := db.numFreeConns(), 0; g != w {
+	if g, w := connPool.numFreeConns(), 0; g != w {
 		t.Errorf("free conns = %d; want %d", g, w)
 	}
 
-	if n := db.numDepsPollUntil(0, time.Second); n > 0 {
+	if n := connPool.numDepsPollUntil(0, time.Second); n > 0 {
 		t.Errorf("number of dependencies = %d; expected 0", n)
-		db.dumpDeps(t)
+		connPool.dumpDeps(t)
 	}
 }
 
-func (db *ConnPool) dumpDeps(t *testing.T) {
-	for fc := range db.dep {
-		db.dumpDep(t, 0, fc, map[finalCloser]bool{})
+func (connPool *ConnPool) dumpDeps(t *testing.T) {
+	for fc := range connPool.dep {
+		connPool.dumpDep(t, 0, fc, map[finalCloser]bool{})
 	}
 }
 
-func (db *ConnPool) dumpDep(t *testing.T, depth int, dep finalCloser, seen map[finalCloser]bool) {
+func (connPool *ConnPool) dumpDep(t *testing.T, depth int, dep finalCloser, seen map[finalCloser]bool) {
 	seen[dep] = true
 	indent := strings.Repeat("  ", depth)
-	ds := db.dep[dep]
+	ds := connPool.dep[dep]
 	for k := range ds {
 		t.Logf("%s%T (%p) waiting for -> %T (%p)", indent, dep, dep, k, k)
 		if fc, ok := k.(finalCloser); ok {
 			if !seen[fc] {
-				db.dumpDep(t, depth+1, fc, seen)
+				connPool.dumpDep(t, depth+1, fc, seen)
 			}
 		}
 	}

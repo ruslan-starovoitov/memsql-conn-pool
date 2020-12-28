@@ -11,7 +11,7 @@
 package mysql
 
 import (
-	"memsql-conn-pool/sql"
+	cpool "memsql-conn-pool"
 )
 
 // NullTime represents a time.Time that may be NULL.
@@ -32,9 +32,9 @@ import (
 // Deprecated: NullTime doesn't honor the loc DSN parameter.
 // NullTime.Scan interprets a time as UTC, not the loc DSN parameter.
 // Use sql.NullTime instead.
-type NullTime sql.NullTime
+type NullTime cpool.NullTime
 
 // for internal use.
 // the mysql package uses sql.NullTime if it is available.
 // if not, the package uses mysql.NullTime.
-type nullTime = sql.NullTime // sql.NullTime is available
+type nullTime = cpool.NullTime // sql.NullTime is available

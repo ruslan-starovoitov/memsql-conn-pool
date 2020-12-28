@@ -11,11 +11,11 @@
 package mysql
 
 import (
-	"memsql-conn-pool/sql"
+	cpool "memsql-conn-pool"
 )
 
 func Fuzz(data []byte) int {
-	db, err := sql.Open("mysql", string(data))
+	db, err := cpool.Open("mysql", string(data))
 	if err != nil {
 		return 0
 	}

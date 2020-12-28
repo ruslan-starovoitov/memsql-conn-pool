@@ -2,20 +2,20 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package sql_test
+package memsql_conn_pool_test
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
+	cpool "memsql-conn-pool"
 	"strings"
 	"time"
 )
 
 var (
 	ctx context.Context
-	db  *sql.DB
+	db  *cpool.ConnPool
 )
 
 func ExampleDB_QueryContext() {
@@ -57,7 +57,7 @@ func ExampleDB_QueryRowContext() {
 	var created time.Time
 	err := db.QueryRowContext(ctx, "SELECT username, created_at FROM users WHERE id=?", id).Scan(&username, &created)
 	switch {
-	case err == sql.ErrNoRows:
+	case err == cpool.ErrNoRows:
 		log.Printf("no user with id %d\n", id)
 	case err != nil:
 		log.Fatalf("query error: %v\n", err)
@@ -221,7 +221,7 @@ func ExampleTx_Prepare() {
 }
 
 func ExampleDB_BeginTx() {
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	tx, err := db.BeginTx(ctx, &cpool.TxOptions{Isolation: cpool.LevelSerializable})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -259,7 +259,7 @@ func ExampleConn_ExecContext() {
 }
 
 func ExampleTx_ExecContext() {
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	tx, err := db.BeginTx(ctx, &cpool.TxOptions{Isolation: cpool.LevelSerializable})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -277,7 +277,7 @@ func ExampleTx_ExecContext() {
 }
 
 func ExampleTx_Rollback() {
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	tx, err := db.BeginTx(ctx, &cpool.TxOptions{Isolation: cpool.LevelSerializable})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -314,7 +314,7 @@ func ExampleStmt() {
 	var username string
 	err = stmt.QueryRowContext(ctx, id).Scan(&username)
 	switch {
-	case err == sql.ErrNoRows:
+	case err == cpool.ErrNoRows:
 		log.Fatalf("no user with id %d", id)
 	case err != nil:
 		log.Fatal(err)
@@ -336,7 +336,7 @@ func ExampleStmt_QueryRowContext() {
 	var username string
 	err = stmt.QueryRowContext(ctx, id).Scan(&username)
 	switch {
-	case err == sql.ErrNoRows:
+	case err == cpool.ErrNoRows:
 		log.Fatalf("no user with id %d", id)
 	case err != nil:
 		log.Fatal(err)

@@ -18,8 +18,8 @@ package mysql
 
 import (
 	"context"
-	"memsql-conn-pool/sql"
-	"memsql-conn-pool/sql/driver"
+	cpool "memsql-conn-pool"
+	"memsql-conn-pool/driver"
 	"net"
 	"sync"
 )
@@ -81,7 +81,7 @@ func (d MySQLDriver) Open(dsn string) (driver.Conn, error) {
 }
 
 func init() {
-	sql.Register("mysql", &MySQLDriver{})
+	cpool.Register("mysql", &MySQLDriver{})
 }
 
 // NewConnector returns new driver.Connector.

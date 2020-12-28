@@ -1,11 +1,7 @@
 package memsql_conn_pool
 
-import (
-	"memsql-conn-pool/sql"
-)
-
 type RowsWrapper struct {
-	sql.Rows
+	Rows
 	releasedChan chan<- struct{}
 }
 

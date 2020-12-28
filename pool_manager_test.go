@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	_ "memsql-conn-pool/mysql"
-	"memsql-conn-pool/sql"
 	"testing"
 	"time"
 )
@@ -36,7 +35,7 @@ func Helper(doneChan <-chan struct{}) {
 func TestConnectionClosing(t *testing.T) {
 	cr := Credentials{Database: "hellomemsql", Username: "root", Password: "RootPass1"}
 	connString := cr.Username + ":" + cr.Password + "@/" + cr.Database
-	db, err := sql.Open("mysql", connString)
+	db, err := Open("mysql", connString)
 	assert.NoError(t, err)
 	connContext := context.Background()
 	go Helper(connContext.Done())

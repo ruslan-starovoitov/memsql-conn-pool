@@ -45,7 +45,7 @@ func TestConvertDerivedUnsupportedSlice(t *testing.T) {
 	type derived []int
 
 	_, err := converter{}.ConvertValue(derived{1})
-	if err == nil || err.Error() != "unsupported type mysql.derived, a slice of int" {
+	if err == nil || err.Error() != "unsupported type mycpool.derived, a slice of int" {
 		t.Fatal("Unexpected error", err)
 	}
 }

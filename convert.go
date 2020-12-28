@@ -4,12 +4,12 @@
 
 // Type conversions for Scan.
 
-package sql
+package memsql_conn_pool
 
 import (
 	"errors"
 	"fmt"
-	"memsql-conn-pool/sql/driver"
+	"memsql-conn-pool/driver"
 	"reflect"
 	"strconv"
 	"time"

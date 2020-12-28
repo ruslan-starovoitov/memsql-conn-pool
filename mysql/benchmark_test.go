@@ -13,8 +13,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	cpool "memsql-conn-pool"
 	"memsql-conn-pool/driver"
-	"memsql-conn-pool/sql"
 	"runtime"
 	"strings"
 	"sync"
@@ -31,24 +31,24 @@ func (tb *TB) check(err error) {
 	}
 }
 
-func (tb *TB) checkDB(db *sql.ConnPool, err error) *sql.ConnPool {
+func (tb *TB) checkDB(db *cpool.ConnPool, err error) *cpool.ConnPool {
 	tb.check(err)
 	return db
 }
 
-func (tb *TB) checkRows(rows *sql.Rows, err error) *sql.Rows {
+func (tb *TB) checkRows(rows *cpool.Rows, err error) *cpool.Rows {
 	tb.check(err)
 	return rows
 }
 
-func (tb *TB) checkStmt(stmt *sql.Stmt, err error) *sql.Stmt {
+func (tb *TB) checkStmt(stmt *cpool.Stmt, err error) *cpool.Stmt {
 	tb.check(err)
 	return stmt
 }
 
-func initDB(b *testing.B, queries ...string) *sql.ConnPool {
+func initDB(b *testing.B, queries ...string) *cpool.ConnPool {
 	tb := (*TB)(b)
-	db := tb.checkDB(sql.Open("mysql", dsn))
+	db := tb.checkDB(cpool.Open("mysql", dsn))
 	for _, query := range queries {
 		if _, err := db.Exec(query); err != nil {
 			b.Fatalf("error on %q: %v", query, err)
@@ -105,7 +105,7 @@ func BenchmarkExec(b *testing.B) {
 	tb := (*TB)(b)
 	b.StopTimer()
 	b.ReportAllocs()
-	db := tb.checkDB(sql.Open("mysql", dsn))
+	db := tb.checkDB(cpool.Open("mysql", dsn))
 	db.SetMaxIdleConns(concurrencyLevel)
 	defer db.Close()
 
@@ -151,7 +151,7 @@ func BenchmarkRoundtripTxt(b *testing.B) {
 	sampleString := string(sample)
 	b.ReportAllocs()
 	tb := (*TB)(b)
-	db := tb.checkDB(sql.Open("mysql", dsn))
+	db := tb.checkDB(cpool.Open("mysql", dsn))
 	defer db.Close()
 	b.StartTimer()
 	var result string
@@ -184,12 +184,12 @@ func BenchmarkRoundtripBin(b *testing.B) {
 	sample, min, max := initRoundtripBenchmarks()
 	b.ReportAllocs()
 	tb := (*TB)(b)
-	db := tb.checkDB(sql.Open("mysql", dsn))
+	db := tb.checkDB(cpool.Open("mysql", dsn))
 	defer db.Close()
 	stmt := tb.checkStmt(db.Prepare("SELECT ?"))
 	defer stmt.Close()
 	b.StartTimer()
-	var result sql.RawBytes
+	var result cpool.RawBytes
 	for i := 0; i < b.N; i++ {
 		length := min + i
 		if length > max {
@@ -245,7 +245,7 @@ func BenchmarkInterpolation(b *testing.B) {
 	}
 }
 
-func benchmarkQueryContext(b *testing.B, db *sql.ConnPool, p int) {
+func benchmarkQueryContext(b *testing.B, db *cpool.ConnPool, p int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	db.SetMaxIdleConns(p * runtime.GOMAXPROCS(0))
@@ -283,7 +283,7 @@ func BenchmarkQueryContext(b *testing.B) {
 	}
 }
 
-func benchmarkExecContext(b *testing.B, db *sql.ConnPool, p int) {
+func benchmarkExecContext(b *testing.B, db *cpool.ConnPool, p int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	db.SetMaxIdleConns(p * runtime.GOMAXPROCS(0))
@@ -354,7 +354,7 @@ func BenchmarkQueryRawBytes(b *testing.B) {
 				}
 				nrows := 0
 				for rows.Next() {
-					var buf sql.RawBytes
+					var buf cpool.RawBytes
 					err := rows.Scan(&buf)
 					if err != nil {
 						b.Fatal(err)

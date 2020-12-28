@@ -111,7 +111,7 @@ func (cfg *Config) normalize() error {
 		case "tcp":
 			cfg.Addr = "127.0.0.1:3306"
 		case "unix":
-			cfg.Addr = "/tmp/mysql.sock"
+			cfg.Addr = "/tmp/mycpool.sock"
 		default:
 			return errors.New("default addr for network '" + cfg.Net + "' unknown")
 		}

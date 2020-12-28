@@ -11,8 +11,8 @@ package mysql
 import (
 	"bytes"
 	"encoding/binary"
+	cpool "memsql-conn-pool"
 	"memsql-conn-pool/driver"
-	"memsql-conn-pool/sql"
 	"testing"
 	"time"
 )
@@ -259,19 +259,19 @@ func TestIsolationLevelMapping(t *testing.T) {
 		expected string
 	}{
 		{
-			level:    driver.IsolationLevel(sql.LevelReadCommitted),
+			level:    driver.IsolationLevel(cpool.LevelReadCommitted),
 			expected: "READ COMMITTED",
 		},
 		{
-			level:    driver.IsolationLevel(sql.LevelRepeatableRead),
+			level:    driver.IsolationLevel(cpool.LevelRepeatableRead),
 			expected: "REPEATABLE READ",
 		},
 		{
-			level:    driver.IsolationLevel(sql.LevelReadUncommitted),
+			level:    driver.IsolationLevel(cpool.LevelReadUncommitted),
 			expected: "READ UNCOMMITTED",
 		},
 		{
-			level:    driver.IsolationLevel(sql.LevelSerializable),
+			level:    driver.IsolationLevel(cpool.LevelSerializable),
 			expected: "SERIALIZABLE",
 		},
 	}
@@ -284,7 +284,7 @@ func TestIsolationLevelMapping(t *testing.T) {
 
 	// check unsupported mapping
 	expectedErr := "mysql: unsupported isolation level: 7"
-	actual, err := mapIsolationLevel(driver.IsolationLevel(sql.LevelLinearizable))
+	actual, err := mapIsolationLevel(driver.IsolationLevel(cpool.LevelLinearizable))
 	if actual != "" || err == nil {
 		t.Fatal("Expected error on unsupported isolation level")
 	}

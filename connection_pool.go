@@ -41,8 +41,9 @@ type ConnPool struct {
 	// maybeOpenNewConnectionsLocked sends on the chan (one send per needed connection)
 	// It is closed during connPool.Close(). The close tells the connectionOpener
 	// goroutine to exit.
-	openerCh     chan struct{}
-	closed       bool
+	openerCh chan struct{}
+
+	closed       bool //TODO возможно стоит убрать
 	dep          map[finalCloser]depSet
 	lastPut      map[*driverConn]string // stacktrace of last conn's put; debug only
 	maxIdleCount int                    // zero means defaultMaxIdleConns; negative means 0

@@ -221,19 +221,19 @@ func (connPool *ConnPool) numOpenConns() int {
 	return connPool.numOpen
 }
 
-// clearAllConns closes all connections in connPool.
-func (connPool *ConnPool) clearAllConns(t *testing.T) {
-	connPool.SetMaxIdleConns(0)
+// // clearAllConns closes all connections in connPool.
+// func (connPool *ConnPool) clearAllConns(t *testing.T) {
+// 	connPool.SetMaxIdleConns(0)
 
-	if g, w := connPool.numFreeConns(), 0; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
+// 	if g, w := connPool.numFreeConns(), 0; g != w {
+// 		t.Errorf("free conns = %d; want %d", g, w)
+// 	}
 
-	if n := connPool.numDepsPollUntil(0, time.Second); n > 0 {
-		t.Errorf("number of dependencies = %d; expected 0", n)
-		connPool.dumpDeps(t)
-	}
-}
+// 	if n := connPool.numDepsPollUntil(0, time.Second); n > 0 {
+// 		t.Errorf("number of dependencies = %d; expected 0", n)
+// 		connPool.dumpDeps(t)
+// 	}
+// }
 
 func (connPool *ConnPool) dumpDeps(t *testing.T) {
 	for fc := range connPool.dep {
@@ -619,89 +619,89 @@ func TestQueryNamedArg(t *testing.T) {
 	}
 }
 
-func TestPoolExhaustOnCancel(t *testing.T) {
-	if testing.Short() {
-		t.Skip("long test")
-	}
+// func TestPoolExhaustOnCancel(t *testing.T) {
+// 	if testing.Short() {
+// 		t.Skip("long test")
+// 	}
 
-	max := 3
-	var saturate, saturateDone sync.WaitGroup
-	saturate.Add(max)
-	saturateDone.Add(max)
+// 	max := 3
+// 	var saturate, saturateDone sync.WaitGroup
+// 	saturate.Add(max)
+// 	saturateDone.Add(max)
 
-	donePing := make(chan bool)
-	state := 0
+// 	donePing := make(chan bool)
+// 	state := 0
 
-	// waiter will be called for all queries, including
-	// initial setup queries. The state is only assigned when
-	// no queries are made.
-	//
-	// Only allow the first batch of queries to finish once the
-	// second batch of Ping queries have finished.
-	waiter := func(ctx context.Context) {
-		switch state {
-		case 0:
-			// Nothing. Initial database setup.
-		case 1:
-			saturate.Done()
-			select {
-			case <-ctx.Done():
-			case <-donePing:
-			}
-		case 2:
-		}
-	}
-	db := newTestDBConnector(t, &fakeConnector{waiter: waiter}, "people")
-	defer closeDB(t, db)
+// 	// waiter will be called for all queries, including
+// 	// initial setup queries. The state is only assigned when
+// 	// no queries are made.
+// 	//
+// 	// Only allow the first batch of queries to finish once the
+// 	// second batch of Ping queries have finished.
+// 	waiter := func(ctx context.Context) {
+// 		switch state {
+// 		case 0:
+// 			// Nothing. Initial database setup.
+// 		case 1:
+// 			saturate.Done()
+// 			select {
+// 			case <-ctx.Done():
+// 			case <-donePing:
+// 			}
+// 		case 2:
+// 		}
+// 	}
+// 	db := newTestDBConnector(t, &fakeConnector{waiter: waiter}, "people")
+// 	defer closeDB(t, db)
 
-	db.SetMaxOpenConns(max)
+// 	db.SetMaxOpenConns(max)
 
-	// First saturate the connection pool.
-	// Then start new requests for a connection that is cancelled after it is requested.
+// 	// First saturate the connection pool.
+// 	// Then start new requests for a connection that is cancelled after it is requested.
 
-	state = 1
-	for i := 0; i < max; i++ {
-		go func() {
-			rows, err := db.Query("SELECT|people|name,photo|")
-			if err != nil {
-				t.Errorf("Query: %v", err)
-				return
-			}
-			rows.Close()
-			saturateDone.Done()
-		}()
-	}
+// 	state = 1
+// 	for i := 0; i < max; i++ {
+// 		go func() {
+// 			rows, err := db.Query("SELECT|people|name,photo|")
+// 			if err != nil {
+// 				t.Errorf("Query: %v", err)
+// 				return
+// 			}
+// 			rows.Close()
+// 			saturateDone.Done()
+// 		}()
+// 	}
 
-	saturate.Wait()
-	if t.Failed() {
-		t.FailNow()
-	}
-	state = 2
+// 	saturate.Wait()
+// 	if t.Failed() {
+// 		t.FailNow()
+// 	}
+// 	state = 2
 
-	// Now cancel the request while it is waiting.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+// 	// Now cancel the request while it is waiting.
+// 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+// 	defer cancel()
 
-	for i := 0; i < max; i++ {
-		ctxReq, cancelReq := context.WithCancel(ctx)
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			cancelReq()
-		}()
-		err := db.PingContext(ctxReq)
-		if err != context.Canceled {
-			t.Fatalf("PingContext (Exhaust): %v", err)
-		}
-	}
-	close(donePing)
-	saturateDone.Wait()
+// 	for i := 0; i < max; i++ {
+// 		ctxReq, cancelReq := context.WithCancel(ctx)
+// 		go func() {
+// 			time.Sleep(100 * time.Millisecond)
+// 			cancelReq()
+// 		}()
+// 		err := db.PingContext(ctxReq)
+// 		if err != context.Canceled {
+// 			t.Fatalf("PingContext (Exhaust): %v", err)
+// 		}
+// 	}
+// 	close(donePing)
+// 	saturateDone.Wait()
 
-	// Now try to open a normal connection.
-	err := db.PingContext(ctx)
-	if err != nil {
-		t.Fatalf("PingContext (Normal): %v", err)
-	}
-}
+// 	// Now try to open a normal connection.
+// 	err := db.PingContext(ctx)
+// 	if err != nil {
+// 		t.Fatalf("PingContext (Normal): %v", err)
+// 	}
+// }
 
 func TestRowsColumns(t *testing.T) {
 	db := newTestDB(t, "people")
@@ -1183,53 +1183,53 @@ func TestTxStmtClosedRePrepares(t *testing.T) {
 	}
 }
 
-func TestParentStmtOutlivesTxStmt(t *testing.T) {
-	db := newTestDB(t, "")
-	defer closeDB(t, db)
-	exec(t, db, "CREATE|t1|name=string,age=int32")
+// func TestParentStmtOutlivesTxStmt(t *testing.T) {
+// 	db := newTestDB(t, "")
+// 	defer closeDB(t, db)
+// 	exec(t, db, "CREATE|t1|name=string,age=int32")
 
-	// Make sure everything happens on the same connection.
-	db.SetMaxOpenConns(1)
+// 	// Make sure everything happens on the same connection.
+// 	db.SetMaxOpenConns(1)
 
-	prepares0 := numPrepares(t, db)
+// 	prepares0 := numPrepares(t, db)
 
-	// connPool.Prepare increments numPrepares.
-	stmt, err := db.Prepare("INSERT|t1|name=?,age=?")
-	if err != nil {
-		t.Fatalf("Stmt, err = %v, %v", stmt, err)
-	}
-	defer stmt.Close()
-	tx, err := db.Begin()
-	if err != nil {
-		t.Fatalf("Begin = %v", err)
-	}
-	txs := tx.Stmt(stmt)
-	if len(stmt.css) != 1 {
-		t.Fatalf("len(stmt.css) = %v; want 1", len(stmt.css))
-	}
-	err = txs.Close()
-	if err != nil {
-		t.Fatalf("txs.Close() = %v", err)
-	}
-	err = tx.Rollback()
-	if err != nil {
-		t.Fatalf("tx.Rollback() = %v", err)
-	}
-	// txs must not be valid.
-	_, err = txs.Exec("Suzan", 30)
-	if err == nil {
-		t.Fatalf("txs.Exec(), expected err")
-	}
-	// Stmt must still be valid.
-	_, err = stmt.Exec("Janina", 25)
-	if err != nil {
-		t.Fatalf("stmt.Exec() = %v", err)
-	}
+// 	// connPool.Prepare increments numPrepares.
+// 	stmt, err := db.Prepare("INSERT|t1|name=?,age=?")
+// 	if err != nil {
+// 		t.Fatalf("Stmt, err = %v, %v", stmt, err)
+// 	}
+// 	defer stmt.Close()
+// 	tx, err := db.Begin()
+// 	if err != nil {
+// 		t.Fatalf("Begin = %v", err)
+// 	}
+// 	txs := tx.Stmt(stmt)
+// 	if len(stmt.css) != 1 {
+// 		t.Fatalf("len(stmt.css) = %v; want 1", len(stmt.css))
+// 	}
+// 	err = txs.Close()
+// 	if err != nil {
+// 		t.Fatalf("txs.Close() = %v", err)
+// 	}
+// 	err = tx.Rollback()
+// 	if err != nil {
+// 		t.Fatalf("tx.Rollback() = %v", err)
+// 	}
+// 	// txs must not be valid.
+// 	_, err = txs.Exec("Suzan", 30)
+// 	if err == nil {
+// 		t.Fatalf("txs.Exec(), expected err")
+// 	}
+// 	// Stmt must still be valid.
+// 	_, err = stmt.Exec("Janina", 25)
+// 	if err != nil {
+// 		t.Fatalf("stmt.Exec() = %v", err)
+// 	}
 
-	if prepares := numPrepares(t, db) - prepares0; prepares != 1 {
-		t.Errorf("executed %d Prepare statements; want 1", prepares)
-	}
-}
+// 	if prepares := numPrepares(t, db) - prepares0; prepares != 1 {
+// 		t.Errorf("executed %d Prepare statements; want 1", prepares)
+// 	}
+// }
 
 // Test that tx.Stmt called with a statement already
 // associated with tx as argument re-prepares the same
@@ -1581,33 +1581,33 @@ func TestConnTx(t *testing.T) {
 // TestConnIsValid verifies that a database connection that should be discarded,
 // is actually discarded and does not re-enter the connection pool.
 // If the IsValid method from *fakeConn is removed, this test will fail.
-func TestConnIsValid(t *testing.T) {
-	db := newTestDB(t, "people")
-	defer closeDB(t, db)
+// func TestConnIsValid(t *testing.T) {
+// 	db := newTestDB(t, "people")
+// 	defer closeDB(t, db)
 
-	db.SetMaxOpenConns(1)
+// 	db.SetMaxOpenConns(1)
 
-	ctx := context.Background()
+// 	ctx := context.Background()
 
-	c, err := db.Conn(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+// 	c, err := db.Conn(ctx)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	err = c.Raw(func(raw interface{}) error {
-		dc := raw.(*fakeConn)
-		dc.stickyBad = true
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.Close()
+// 	err = c.Raw(func(raw interface{}) error {
+// 		dc := raw.(*fakeConn)
+// 		dc.stickyBad = true
+// 		return nil
+// 	})
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	c.Close()
 
-	if len(db.freeConn) > 0 && db.freeConn[0].ci.(*fakeConn).stickyBad {
-		t.Fatal("bad connection returned to pool; expected bad connection to be discarded")
-	}
-}
+// 	if len(db.freeConn) > 0 && db.freeConn[0].ci.(*fakeConn).stickyBad {
+// 		t.Fatal("bad connection returned to pool; expected bad connection to be discarded")
+// 	}
+// }
 
 // Tests fix for issue 2542, that we release a lock when querying on
 // a closed connection.
@@ -1980,310 +1980,310 @@ func TestSimultaneousQueries(t *testing.T) {
 	defer r2.Close()
 }
 
-func TestMaxIdleConns(t *testing.T) {
-	db := newTestDB(t, "people")
-	defer closeDB(t, db)
+// func TestMaxIdleConns(t *testing.T) {
+// 	db := newTestDB(t, "people")
+// 	defer closeDB(t, db)
 
-	tx, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	tx.Commit()
-	if got := len(db.freeConn); got != 1 {
-		t.Errorf("freeConns = %d; want 1", got)
-	}
+// 	tx, err := db.Begin()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	tx.Commit()
+// 	if got := len(db.freeConn); got != 1 {
+// 		t.Errorf("freeConns = %d; want 1", got)
+// 	}
 
-	db.SetMaxIdleConns(0)
+// 	db.SetMaxIdleConns(0)
 
-	if got := len(db.freeConn); got != 0 {
-		t.Errorf("freeConns after set to zero = %d; want 0", got)
-	}
+// 	if got := len(db.freeConn); got != 0 {
+// 		t.Errorf("freeConns after set to zero = %d; want 0", got)
+// 	}
 
-	tx, err = db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	tx.Commit()
-	if got := len(db.freeConn); got != 0 {
-		t.Errorf("freeConns = %d; want 0", got)
-	}
-}
+// 	tx, err = db.Begin()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	tx.Commit()
+// 	if got := len(db.freeConn); got != 0 {
+// 		t.Errorf("freeConns = %d; want 0", got)
+// 	}
+// }
 
-func TestMaxOpenConns(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping in short mode")
-	}
-	defer setHookpostCloseConn(nil)
-	setHookpostCloseConn(func(_ *fakeConn, err error) {
-		if err != nil {
-			t.Errorf("Error closing fakeConn: %v", err)
-		}
-	})
+// func TestMaxOpenConns(t *testing.T) {
+// 	if testing.Short() {
+// 		t.Skip("skipping in short mode")
+// 	}
+// 	defer setHookpostCloseConn(nil)
+// 	setHookpostCloseConn(func(_ *fakeConn, err error) {
+// 		if err != nil {
+// 			t.Errorf("Error closing fakeConn: %v", err)
+// 		}
+// 	})
 
-	db := newTestDB(t, "magicquery")
-	defer closeDB(t, db)
+// 	db := newTestDB(t, "magicquery")
+// 	defer closeDB(t, db)
 
-	driver := db.Driver().(*fakeDriver)
+// 	driver := db.Driver().(*fakeDriver)
 
-	// Force the number of open connections to 0 so we can get an accurate
-	// count for the test
-	db.clearAllConns(t)
+// 	// Force the number of open connections to 0 so we can get an accurate
+// 	// count for the test
+// 	db.clearAllConns(t)
 
-	driver.mu.Lock()
-	opens0 := driver.openCount
-	closes0 := driver.closeCount
-	driver.mu.Unlock()
+// 	driver.mu.Lock()
+// 	opens0 := driver.openCount
+// 	closes0 := driver.closeCount
+// 	driver.mu.Unlock()
 
-	db.SetMaxIdleConns(10)
-	db.SetMaxOpenConns(10)
+// 	db.SetMaxIdleConns(10)
+// 	db.SetMaxOpenConns(10)
 
-	stmt, err := db.Prepare("SELECT|magicquery|op|op=?,millis=?")
-	if err != nil {
-		t.Fatal(err)
-	}
+// 	stmt, err := db.Prepare("SELECT|magicquery|op|op=?,millis=?")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	// Start 50 parallel slow queries.
-	const (
-		nquery      = 50
-		sleepMillis = 25
-		nbatch      = 2
-	)
-	var wg sync.WaitGroup
-	for batch := 0; batch < nbatch; batch++ {
-		for i := 0; i < nquery; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				var op string
-				if err := stmt.QueryRow("sleep", sleepMillis).Scan(&op); err != nil && err != ErrNoRows {
-					t.Error(err)
-				}
-			}()
-		}
-		// Sleep for twice the expected length of time for the
-		// batch of 50 queries above to finish before starting
-		// the next round.
-		time.Sleep(2 * sleepMillis * time.Millisecond)
-	}
-	wg.Wait()
+// 	// Start 50 parallel slow queries.
+// 	const (
+// 		nquery      = 50
+// 		sleepMillis = 25
+// 		nbatch      = 2
+// 	)
+// 	var wg sync.WaitGroup
+// 	for batch := 0; batch < nbatch; batch++ {
+// 		for i := 0; i < nquery; i++ {
+// 			wg.Add(1)
+// 			go func() {
+// 				defer wg.Done()
+// 				var op string
+// 				if err := stmt.QueryRow("sleep", sleepMillis).Scan(&op); err != nil && err != ErrNoRows {
+// 					t.Error(err)
+// 				}
+// 			}()
+// 		}
+// 		// Sleep for twice the expected length of time for the
+// 		// batch of 50 queries above to finish before starting
+// 		// the next round.
+// 		time.Sleep(2 * sleepMillis * time.Millisecond)
+// 	}
+// 	wg.Wait()
 
-	if g, w := db.numFreeConns(), 10; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
+// 	if g, w := db.numFreeConns(), 10; g != w {
+// 		t.Errorf("free conns = %d; want %d", g, w)
+// 	}
 
-	if n := db.numDepsPollUntil(20, time.Second); n > 20 {
-		t.Errorf("number of dependencies = %d; expected <= 20", n)
-		db.dumpDeps(t)
-	}
+// 	if n := db.numDepsPollUntil(20, time.Second); n > 20 {
+// 		t.Errorf("number of dependencies = %d; expected <= 20", n)
+// 		db.dumpDeps(t)
+// 	}
 
-	driver.mu.Lock()
-	opens := driver.openCount - opens0
-	closes := driver.closeCount - closes0
-	driver.mu.Unlock()
+// 	driver.mu.Lock()
+// 	opens := driver.openCount - opens0
+// 	closes := driver.closeCount - closes0
+// 	driver.mu.Unlock()
 
-	if opens > 10 {
-		t.Logf("open calls = %d", opens)
-		t.Logf("close calls = %d", closes)
-		t.Errorf("connPool connections opened = %d; want <= 10", opens)
-		db.dumpDeps(t)
-	}
+// 	if opens > 10 {
+// 		t.Logf("open calls = %d", opens)
+// 		t.Logf("close calls = %d", closes)
+// 		t.Errorf("connPool connections opened = %d; want <= 10", opens)
+// 		db.dumpDeps(t)
+// 	}
 
-	if err := stmt.Close(); err != nil {
-		t.Fatal(err)
-	}
+// 	if err := stmt.Close(); err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	if g, w := db.numFreeConns(), 10; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
+// 	if g, w := db.numFreeConns(), 10; g != w {
+// 		t.Errorf("free conns = %d; want %d", g, w)
+// 	}
 
-	if n := db.numDepsPollUntil(10, time.Second); n > 10 {
-		t.Errorf("number of dependencies = %d; expected <= 10", n)
-		db.dumpDeps(t)
-	}
+// 	if n := db.numDepsPollUntil(10, time.Second); n > 10 {
+// 		t.Errorf("number of dependencies = %d; expected <= 10", n)
+// 		db.dumpDeps(t)
+// 	}
 
-	db.SetMaxOpenConns(5)
+// 	db.SetMaxOpenConns(5)
 
-	if g, w := db.numFreeConns(), 5; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
+// 	if g, w := db.numFreeConns(), 5; g != w {
+// 		t.Errorf("free conns = %d; want %d", g, w)
+// 	}
 
-	if n := db.numDepsPollUntil(5, time.Second); n > 5 {
-		t.Errorf("number of dependencies = %d; expected 0", n)
-		db.dumpDeps(t)
-	}
+// 	if n := db.numDepsPollUntil(5, time.Second); n > 5 {
+// 		t.Errorf("number of dependencies = %d; expected 0", n)
+// 		db.dumpDeps(t)
+// 	}
 
-	db.SetMaxOpenConns(0)
+// 	db.SetMaxOpenConns(0)
 
-	if g, w := db.numFreeConns(), 5; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
+// 	if g, w := db.numFreeConns(), 5; g != w {
+// 		t.Errorf("free conns = %d; want %d", g, w)
+// 	}
 
-	if n := db.numDepsPollUntil(5, time.Second); n > 5 {
-		t.Errorf("number of dependencies = %d; expected 0", n)
-		db.dumpDeps(t)
-	}
+// 	if n := db.numDepsPollUntil(5, time.Second); n > 5 {
+// 		t.Errorf("number of dependencies = %d; expected 0", n)
+// 		db.dumpDeps(t)
+// 	}
 
-	db.clearAllConns(t)
-}
+// 	db.clearAllConns(t)
+// }
 
 // Issue 9453: tests that SetMaxOpenConns can be lowered at runtime
 // and affects the subsequent release of connections.
-func TestMaxOpenConnsOnBusy(t *testing.T) {
-	defer setHookpostCloseConn(nil)
-	setHookpostCloseConn(func(_ *fakeConn, err error) {
-		if err != nil {
-			t.Errorf("Error closing fakeConn: %v", err)
-		}
-	})
+// func TestMaxOpenConnsOnBusy(t *testing.T) {
+// 	defer setHookpostCloseConn(nil)
+// 	setHookpostCloseConn(func(_ *fakeConn, err error) {
+// 		if err != nil {
+// 			t.Errorf("Error closing fakeConn: %v", err)
+// 		}
+// 	})
 
-	db := newTestDB(t, "magicquery")
-	defer closeDB(t, db)
+// 	db := newTestDB(t, "magicquery")
+// 	defer closeDB(t, db)
 
-	db.SetMaxOpenConns(3)
+// 	db.SetMaxOpenConns(3)
 
-	ctx := context.Background()
+// 	ctx := context.Background()
 
-	conn0, err := db.conn(ctx, cachedOrNewConn)
-	if err != nil {
-		t.Fatalf("connPool open conn fail: %v", err)
-	}
+// 	conn0, err := db.conn(ctx, cachedOrNewConn)
+// 	if err != nil {
+// 		t.Fatalf("connPool open conn fail: %v", err)
+// 	}
 
-	conn1, err := db.conn(ctx, cachedOrNewConn)
-	if err != nil {
-		t.Fatalf("connPool open conn fail: %v", err)
-	}
+// 	conn1, err := db.conn(ctx, cachedOrNewConn)
+// 	if err != nil {
+// 		t.Fatalf("connPool open conn fail: %v", err)
+// 	}
 
-	conn2, err := db.conn(ctx, cachedOrNewConn)
-	if err != nil {
-		t.Fatalf("connPool open conn fail: %v", err)
-	}
+// 	conn2, err := db.conn(ctx, cachedOrNewConn)
+// 	if err != nil {
+// 		t.Fatalf("connPool open conn fail: %v", err)
+// 	}
 
-	if g, w := db.numOpen, 3; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
+// 	if g, w := db.numOpen, 3; g != w {
+// 		t.Errorf("free conns = %d; want %d", g, w)
+// 	}
 
-	db.SetMaxOpenConns(2)
-	if g, w := db.numOpen, 3; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
+// 	db.SetMaxOpenConns(2)
+// 	if g, w := db.numOpen, 3; g != w {
+// 		t.Errorf("free conns = %d; want %d", g, w)
+// 	}
 
-	conn0.releaseConn(nil)
-	conn1.releaseConn(nil)
-	if g, w := db.numOpen, 2; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
+// 	conn0.releaseConn(nil)
+// 	conn1.releaseConn(nil)
+// 	if g, w := db.numOpen, 2; g != w {
+// 		t.Errorf("free conns = %d; want %d", g, w)
+// 	}
 
-	conn2.releaseConn(nil)
-	if g, w := db.numOpen, 2; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
-}
+// 	conn2.releaseConn(nil)
+// 	if g, w := db.numOpen, 2; g != w {
+// 		t.Errorf("free conns = %d; want %d", g, w)
+// 	}
+// }
 
 // Issue 10886: tests that all connection attempts return when more than
 // ConnPool.maxOpen connections are in flight and the first ConnPool.maxOpen fail.
-func TestPendingConnsAfterErr(t *testing.T) {
-	const (
-		maxOpen = 2
-		tryOpen = maxOpen*2 + 2
-	)
+// func TestPendingConnsAfterErr(t *testing.T) {
+// 	const (
+// 		maxOpen = 2
+// 		tryOpen = maxOpen*2 + 2
+// 	)
 
-	// No queries will be run.
-	db, err := Open("test", fakeDBName)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer closeDB(t, db)
-	defer func() {
-		for k, v := range db.lastPut {
-			t.Logf("%p: %v", k, v)
-		}
-	}()
+// 	// No queries will be run.
+// 	db, err := Open("test", fakeDBName)
+// 	if err != nil {
+// 		t.Fatalf("Open: %v", err)
+// 	}
+// 	defer closeDB(t, db)
+// 	defer func() {
+// 		for k, v := range db.lastPut {
+// 			t.Logf("%p: %v", k, v)
+// 		}
+// 	}()
 
-	db.SetMaxOpenConns(maxOpen)
-	db.SetMaxIdleConns(0)
+// 	db.SetMaxOpenConns(maxOpen)
+// 	db.SetMaxIdleConns(0)
 
-	errOffline := errors.New("connPool offline")
+// 	errOffline := errors.New("connPool offline")
 
-	defer func() { setHookOpenErr(nil) }()
+// 	defer func() { setHookOpenErr(nil) }()
 
-	errs := make(chan error, tryOpen)
+// 	errs := make(chan error, tryOpen)
 
-	var opening sync.WaitGroup
-	opening.Add(tryOpen)
+// 	var opening sync.WaitGroup
+// 	opening.Add(tryOpen)
 
-	setHookOpenErr(func() error {
-		// Wait for all connections to enqueue.
-		opening.Wait()
-		return errOffline
-	})
+// 	setHookOpenErr(func() error {
+// 		// Wait for all connections to enqueue.
+// 		opening.Wait()
+// 		return errOffline
+// 	})
 
-	for i := 0; i < tryOpen; i++ {
-		go func() {
-			opening.Done() // signal one connection is in flight
-			_, err := db.Exec("will never run")
-			errs <- err
-		}()
-	}
+// 	for i := 0; i < tryOpen; i++ {
+// 		go func() {
+// 			opening.Done() // signal one connection is in flight
+// 			_, err := db.Exec("will never run")
+// 			errs <- err
+// 		}()
+// 	}
 
-	opening.Wait() // wait for all workers to begin running
+// 	opening.Wait() // wait for all workers to begin running
 
-	const timeout = 5 * time.Second
-	to := time.NewTimer(timeout)
-	defer to.Stop()
+// 	const timeout = 5 * time.Second
+// 	to := time.NewTimer(timeout)
+// 	defer to.Stop()
 
-	// check that all connections fail without deadlock
-	for i := 0; i < tryOpen; i++ {
-		select {
-		case err := <-errs:
-			if got, want := err, errOffline; got != want {
-				t.Errorf("unexpected err: got %v, want %v", got, want)
-			}
-		case <-to.C:
-			t.Fatalf("orphaned connection request(s), still waiting after %v", timeout)
-		}
-	}
+// 	// check that all connections fail without deadlock
+// 	for i := 0; i < tryOpen; i++ {
+// 		select {
+// 		case err := <-errs:
+// 			if got, want := err, errOffline; got != want {
+// 				t.Errorf("unexpected err: got %v, want %v", got, want)
+// 			}
+// 		case <-to.C:
+// 			t.Fatalf("orphaned connection request(s), still waiting after %v", timeout)
+// 		}
+// 	}
 
-	// Wait a reasonable time for the database to close all connections.
-	tick := time.NewTicker(3 * time.Millisecond)
-	defer tick.Stop()
-	for {
-		select {
-		case <-tick.C:
-			db.mu.Lock()
-			if db.numOpen == 0 {
-				db.mu.Unlock()
-				return
-			}
-			db.mu.Unlock()
-		case <-to.C:
-			// Closing the database will check for numOpen and fail the test.
-			return
-		}
-	}
-}
+// 	// Wait a reasonable time for the database to close all connections.
+// 	tick := time.NewTicker(3 * time.Millisecond)
+// 	defer tick.Stop()
+// 	for {
+// 		select {
+// 		case <-tick.C:
+// 			db.mu.Lock()
+// 			if db.numOpen == 0 {
+// 				db.mu.Unlock()
+// 				return
+// 			}
+// 			db.mu.Unlock()
+// 		case <-to.C:
+// 			// Closing the database will check for numOpen and fail the test.
+// 			return
+// 		}
+// 	}
+// }
 
-func TestSingleOpenConn(t *testing.T) {
-	db := newTestDB(t, "people")
-	defer closeDB(t, db)
+// func TestSingleOpenConn(t *testing.T) {
+// 	db := newTestDB(t, "people")
+// 	defer closeDB(t, db)
 
-	db.SetMaxOpenConns(1)
+// 	db.SetMaxOpenConns(1)
 
-	rows, err := db.Query("SELECT|people|name|")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = rows.Close(); err != nil {
-		t.Fatal(err)
-	}
-	// shouldn't deadlock
-	rows, err = db.Query("SELECT|people|name|")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = rows.Close(); err != nil {
-		t.Fatal(err)
-	}
-}
+// 	rows, err := db.Query("SELECT|people|name|")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	if err = rows.Close(); err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	// shouldn't deadlock
+// 	rows, err = db.Query("SELECT|people|name|")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	if err = rows.Close(); err != nil {
+// 		t.Fatal(err)
+// 	}
+// }
 
 func TestStats(t *testing.T) {
 	db := newTestDB(t, "people")
@@ -2305,187 +2305,187 @@ func TestStats(t *testing.T) {
 	}
 }
 
-func TestConnMaxLifetime(t *testing.T) {
-	t0 := time.Unix(1000000, 0)
-	offset := time.Duration(0)
+// func TestConnMaxLifetime(t *testing.T) {
+// 	t0 := time.Unix(1000000, 0)
+// 	offset := time.Duration(0)
 
-	nowFunc = func() time.Time { return t0.Add(offset) }
-	defer func() { nowFunc = time.Now }()
+// 	nowFunc = func() time.Time { return t0.Add(offset) }
+// 	defer func() { nowFunc = time.Now }()
 
-	db := newTestDB(t, "magicquery")
-	defer closeDB(t, db)
+// 	db := newTestDB(t, "magicquery")
+// 	defer closeDB(t, db)
 
-	driver := db.Driver().(*fakeDriver)
+// 	driver := db.Driver().(*fakeDriver)
 
-	// Force the number of open connections to 0 so we can get an accurate
-	// count for the test
-	db.clearAllConns(t)
+// 	// Force the number of open connections to 0 so we can get an accurate
+// 	// count for the test
+// 	db.clearAllConns(t)
 
-	driver.mu.Lock()
-	opens0 := driver.openCount
-	closes0 := driver.closeCount
-	driver.mu.Unlock()
+// 	driver.mu.Lock()
+// 	opens0 := driver.openCount
+// 	closes0 := driver.closeCount
+// 	driver.mu.Unlock()
 
-	db.SetMaxIdleConns(10)
-	db.SetMaxOpenConns(10)
+// 	db.SetMaxIdleConns(10)
+// 	db.SetMaxOpenConns(10)
 
-	tx, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
+// 	tx, err := db.Begin()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	offset = time.Second
-	tx2, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
+// 	offset = time.Second
+// 	tx2, err := db.Begin()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	tx.Commit()
-	tx2.Commit()
+// 	tx.Commit()
+// 	tx2.Commit()
 
-	driver.mu.Lock()
-	opens := driver.openCount - opens0
-	closes := driver.closeCount - closes0
-	driver.mu.Unlock()
+// 	driver.mu.Lock()
+// 	opens := driver.openCount - opens0
+// 	closes := driver.closeCount - closes0
+// 	driver.mu.Unlock()
 
-	if opens != 2 {
-		t.Errorf("opens = %d; want 2", opens)
-	}
-	if closes != 0 {
-		t.Errorf("closes = %d; want 0", closes)
-	}
-	if g, w := db.numFreeConns(), 2; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
+// 	if opens != 2 {
+// 		t.Errorf("opens = %d; want 2", opens)
+// 	}
+// 	if closes != 0 {
+// 		t.Errorf("closes = %d; want 0", closes)
+// 	}
+// 	if g, w := db.numFreeConns(), 2; g != w {
+// 		t.Errorf("free conns = %d; want %d", g, w)
+// 	}
 
-	// Expire first conn
-	offset = 11 * time.Second
-	db.SetConnMaxLifetime(10 * time.Second)
-	if err != nil {
-		t.Fatal(err)
-	}
+// 	// Expire first conn
+// 	offset = 11 * time.Second
+// 	db.SetConnMaxLifetime(10 * time.Second)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	tx, err = db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	tx2, err = db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	tx.Commit()
-	tx2.Commit()
+// 	tx, err = db.Begin()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	tx2, err = db.Begin()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	tx.Commit()
+// 	tx2.Commit()
 
-	driver.mu.Lock()
-	opens = driver.openCount - opens0
-	closes = driver.closeCount - closes0
-	driver.mu.Unlock()
+// 	driver.mu.Lock()
+// 	opens = driver.openCount - opens0
+// 	closes = driver.closeCount - closes0
+// 	driver.mu.Unlock()
 
-	if opens != 3 {
-		t.Errorf("opens = %d; want 3", opens)
-	}
-	if closes != 1 {
-		t.Errorf("closes = %d; want 1", closes)
-	}
-}
+// 	if opens != 3 {
+// 		t.Errorf("opens = %d; want 3", opens)
+// 	}
+// 	if closes != 1 {
+// 		t.Errorf("closes = %d; want 1", closes)
+// 	}
+// }
 
 // golang.org/issue/5323
-func TestStmtCloseDeps(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping in short mode")
-	}
-	defer setHookpostCloseConn(nil)
-	setHookpostCloseConn(func(_ *fakeConn, err error) {
-		if err != nil {
-			t.Errorf("Error closing fakeConn: %v", err)
-		}
-	})
+// func TestStmtCloseDeps(t *testing.T) {
+// 	if testing.Short() {
+// 		t.Skip("skipping in short mode")
+// 	}
+// 	defer setHookpostCloseConn(nil)
+// 	setHookpostCloseConn(func(_ *fakeConn, err error) {
+// 		if err != nil {
+// 			t.Errorf("Error closing fakeConn: %v", err)
+// 		}
+// 	})
 
-	db := newTestDB(t, "magicquery")
-	defer closeDB(t, db)
+// 	db := newTestDB(t, "magicquery")
+// 	defer closeDB(t, db)
 
-	driver := db.Driver().(*fakeDriver)
+// 	driver := db.Driver().(*fakeDriver)
 
-	driver.mu.Lock()
-	opens0 := driver.openCount
-	closes0 := driver.closeCount
-	driver.mu.Unlock()
-	openDelta0 := opens0 - closes0
+// 	driver.mu.Lock()
+// 	opens0 := driver.openCount
+// 	closes0 := driver.closeCount
+// 	driver.mu.Unlock()
+// 	openDelta0 := opens0 - closes0
 
-	stmt, err := db.Prepare("SELECT|magicquery|op|op=?,millis=?")
-	if err != nil {
-		t.Fatal(err)
-	}
+// 	stmt, err := db.Prepare("SELECT|magicquery|op|op=?,millis=?")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	// Start 50 parallel slow queries.
-	const (
-		nquery      = 50
-		sleepMillis = 25
-		nbatch      = 2
-	)
-	var wg sync.WaitGroup
-	for batch := 0; batch < nbatch; batch++ {
-		for i := 0; i < nquery; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				var op string
-				if err := stmt.QueryRow("sleep", sleepMillis).Scan(&op); err != nil && err != ErrNoRows {
-					t.Error(err)
-				}
-			}()
-		}
-		// Sleep for twice the expected length of time for the
-		// batch of 50 queries above to finish before starting
-		// the next round.
-		time.Sleep(2 * sleepMillis * time.Millisecond)
-	}
-	wg.Wait()
+// 	// Start 50 parallel slow queries.
+// 	const (
+// 		nquery      = 50
+// 		sleepMillis = 25
+// 		nbatch      = 2
+// 	)
+// 	var wg sync.WaitGroup
+// 	for batch := 0; batch < nbatch; batch++ {
+// 		for i := 0; i < nquery; i++ {
+// 			wg.Add(1)
+// 			go func() {
+// 				defer wg.Done()
+// 				var op string
+// 				if err := stmt.QueryRow("sleep", sleepMillis).Scan(&op); err != nil && err != ErrNoRows {
+// 					t.Error(err)
+// 				}
+// 			}()
+// 		}
+// 		// Sleep for twice the expected length of time for the
+// 		// batch of 50 queries above to finish before starting
+// 		// the next round.
+// 		time.Sleep(2 * sleepMillis * time.Millisecond)
+// 	}
+// 	wg.Wait()
 
-	if g, w := db.numFreeConns(), 2; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
+// 	if g, w := db.numFreeConns(), 2; g != w {
+// 		t.Errorf("free conns = %d; want %d", g, w)
+// 	}
 
-	if n := db.numDepsPollUntil(4, time.Second); n > 4 {
-		t.Errorf("number of dependencies = %d; expected <= 4", n)
-		db.dumpDeps(t)
-	}
+// 	if n := db.numDepsPollUntil(4, time.Second); n > 4 {
+// 		t.Errorf("number of dependencies = %d; expected <= 4", n)
+// 		db.dumpDeps(t)
+// 	}
 
-	driver.mu.Lock()
-	opens := driver.openCount - opens0
-	closes := driver.closeCount - closes0
-	openDelta := (driver.openCount - driver.closeCount) - openDelta0
-	driver.mu.Unlock()
+// 	driver.mu.Lock()
+// 	opens := driver.openCount - opens0
+// 	closes := driver.closeCount - closes0
+// 	openDelta := (driver.openCount - driver.closeCount) - openDelta0
+// 	driver.mu.Unlock()
 
-	if openDelta > 2 {
-		t.Logf("open calls = %d", opens)
-		t.Logf("close calls = %d", closes)
-		t.Logf("open delta = %d", openDelta)
-		t.Errorf("connPool connections opened = %d; want <= 2", openDelta)
-		db.dumpDeps(t)
-	}
+// 	if openDelta > 2 {
+// 		t.Logf("open calls = %d", opens)
+// 		t.Logf("close calls = %d", closes)
+// 		t.Logf("open delta = %d", openDelta)
+// 		t.Errorf("connPool connections opened = %d; want <= 2", openDelta)
+// 		db.dumpDeps(t)
+// 	}
 
-	if !waitCondition(5*time.Second, 5*time.Millisecond, func() bool {
-		return len(stmt.css) <= nquery
-	}) {
-		t.Errorf("len(stmt.css) = %d; want <= %d", len(stmt.css), nquery)
-	}
+// 	if !waitCondition(5*time.Second, 5*time.Millisecond, func() bool {
+// 		return len(stmt.css) <= nquery
+// 	}) {
+// 		t.Errorf("len(stmt.css) = %d; want <= %d", len(stmt.css), nquery)
+// 	}
 
-	if err := stmt.Close(); err != nil {
-		t.Fatal(err)
-	}
+// 	if err := stmt.Close(); err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	if g, w := db.numFreeConns(), 2; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
+// 	if g, w := db.numFreeConns(), 2; g != w {
+// 		t.Errorf("free conns = %d; want %d", g, w)
+// 	}
 
-	if n := db.numDepsPollUntil(2, time.Second); n > 2 {
-		t.Errorf("number of dependencies = %d; expected <= 2", n)
-		db.dumpDeps(t)
-	}
+// 	if n := db.numDepsPollUntil(2, time.Second); n > 2 {
+// 		t.Errorf("number of dependencies = %d; expected <= 2", n)
+// 		db.dumpDeps(t)
+// 	}
 
-	db.clearAllConns(t)
-}
+// 	db.clearAllConns(t)
+// }
 
 // golang.org/issue/5046
 func TestCloseConnBeforeStmts(t *testing.T) {
@@ -2543,23 +2543,23 @@ func TestCloseConnBeforeStmts(t *testing.T) {
 
 // golang.org/issue/5283: don't release the Rows' connection in Close
 // before calling Stmt.Close.
-func TestRowsCloseOrder(t *testing.T) {
-	db := newTestDB(t, "people")
-	defer closeDB(t, db)
+// func TestRowsCloseOrder(t *testing.T) {
+// 	db := newTestDB(t, "people")
+// 	defer closeDB(t, db)
 
-	db.SetMaxIdleConns(0)
-	setStrictFakeConnClose(t)
-	defer setStrictFakeConnClose(nil)
+// 	db.SetMaxIdleConns(0)
+// 	setStrictFakeConnClose(t)
+// 	defer setStrictFakeConnClose(nil)
 
-	rows, err := db.Query("SELECT|people|age,name|")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = rows.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-}
+// 	rows, err := db.Query("SELECT|people|age,name|")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	err = rows.Close()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// }
 
 func TestRowsImplicitClose(t *testing.T) {
 	db := newTestDB(t, "people")
@@ -2589,158 +2589,158 @@ func TestRowsImplicitClose(t *testing.T) {
 	}
 }
 
-func TestStmtCloseOrder(t *testing.T) {
-	db := newTestDB(t, "people")
-	defer closeDB(t, db)
+// func TestStmtCloseOrder(t *testing.T) {
+// 	db := newTestDB(t, "people")
+// 	defer closeDB(t, db)
 
-	db.SetMaxIdleConns(0)
-	setStrictFakeConnClose(t)
-	defer setStrictFakeConnClose(nil)
+// 	db.SetMaxIdleConns(0)
+// 	setStrictFakeConnClose(t)
+// 	defer setStrictFakeConnClose(nil)
 
-	_, err := db.Query("SELECT|non_existent|name|")
-	if err == nil {
-		t.Fatal("Querying non-existent table should fail")
-	}
-}
+// 	_, err := db.Query("SELECT|non_existent|name|")
+// 	if err == nil {
+// 		t.Fatal("Querying non-existent table should fail")
+// 	}
+// }
 
 // Test cases where there's more than maxBadConnRetries bad connections in the
 // pool (issue 8834)
-func TestManyErrBadConn(t *testing.T) {
-	manyErrBadConnSetup := func(first ...func(db *ConnPool)) *ConnPool {
-		db := newTestDB(t, "people")
+// func TestManyErrBadConn(t *testing.T) {
+// 	manyErrBadConnSetup := func(first ...func(db *ConnPool)) *ConnPool {
+// 		db := newTestDB(t, "people")
 
-		for _, f := range first {
-			f(db)
-		}
+// 		for _, f := range first {
+// 			f(db)
+// 		}
 
-		nconn := maxBadConnRetries + 1
-		db.SetMaxIdleConns(nconn)
-		db.SetMaxOpenConns(nconn)
-		// open enough connections
-		func() {
-			for i := 0; i < nconn; i++ {
-				rows, err := db.Query("SELECT|people|age,name|")
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer rows.Close()
-			}
-		}()
+// 		nconn := maxBadConnRetries + 1
+// 		db.SetMaxIdleConns(nconn)
+// 		db.SetMaxOpenConns(nconn)
+// 		// open enough connections
+// 		func() {
+// 			for i := 0; i < nconn; i++ {
+// 				rows, err := db.Query("SELECT|people|age,name|")
+// 				if err != nil {
+// 					t.Fatal(err)
+// 				}
+// 				defer rows.Close()
+// 			}
+// 		}()
 
-		db.mu.Lock()
-		defer db.mu.Unlock()
-		if db.numOpen != nconn {
-			t.Fatalf("unexpected numOpen %d (was expecting %d)", db.numOpen, nconn)
-		} else if len(db.freeConn) != nconn {
-			t.Fatalf("unexpected len(connPool.freeConn) %d (was expecting %d)", len(db.freeConn), nconn)
-		}
-		for _, conn := range db.freeConn {
-			conn.Lock()
-			conn.ci.(*fakeConn).stickyBad = true
-			conn.Unlock()
-		}
-		return db
-	}
+// 		db.mu.Lock()
+// 		defer db.mu.Unlock()
+// 		if db.numOpen != nconn {
+// 			t.Fatalf("unexpected numOpen %d (was expecting %d)", db.numOpen, nconn)
+// 		} else if len(db.freeConn) != nconn {
+// 			t.Fatalf("unexpected len(connPool.freeConn) %d (was expecting %d)", len(db.freeConn), nconn)
+// 		}
+// 		for _, conn := range db.freeConn {
+// 			conn.Lock()
+// 			conn.ci.(*fakeConn).stickyBad = true
+// 			conn.Unlock()
+// 		}
+// 		return db
+// 	}
 
-	// Query
-	db := manyErrBadConnSetup()
-	defer closeDB(t, db)
-	rows, err := db.Query("SELECT|people|age,name|")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = rows.Close(); err != nil {
-		t.Fatal(err)
-	}
+// 	// Query
+// 	db := manyErrBadConnSetup()
+// 	defer closeDB(t, db)
+// 	rows, err := db.Query("SELECT|people|age,name|")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	if err = rows.Close(); err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	// Exec
-	db = manyErrBadConnSetup()
-	defer closeDB(t, db)
-	_, err = db.Exec("INSERT|people|name=Julia,age=19")
-	if err != nil {
-		t.Fatal(err)
-	}
+// 	// Exec
+// 	db = manyErrBadConnSetup()
+// 	defer closeDB(t, db)
+// 	_, err = db.Exec("INSERT|people|name=Julia,age=19")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	// Begin
-	db = manyErrBadConnSetup()
-	defer closeDB(t, db)
-	tx, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = tx.Rollback(); err != nil {
-		t.Fatal(err)
-	}
+// 	// Begin
+// 	db = manyErrBadConnSetup()
+// 	defer closeDB(t, db)
+// 	tx, err := db.Begin()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	if err = tx.Rollback(); err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	// Prepare
-	db = manyErrBadConnSetup()
-	defer closeDB(t, db)
-	stmt, err := db.Prepare("SELECT|people|age,name|")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = stmt.Close(); err != nil {
-		t.Fatal(err)
-	}
+// 	// Prepare
+// 	db = manyErrBadConnSetup()
+// 	defer closeDB(t, db)
+// 	stmt, err := db.Prepare("SELECT|people|age,name|")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	if err = stmt.Close(); err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	// Stmt.Exec
-	db = manyErrBadConnSetup(func(db *ConnPool) {
-		stmt, err = db.Prepare("INSERT|people|name=Julia,age=19")
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-	defer closeDB(t, db)
-	_, err = stmt.Exec()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = stmt.Close(); err != nil {
-		t.Fatal(err)
-	}
+// 	// Stmt.Exec
+// 	db = manyErrBadConnSetup(func(db *ConnPool) {
+// 		stmt, err = db.Prepare("INSERT|people|name=Julia,age=19")
+// 		if err != nil {
+// 			t.Fatal(err)
+// 		}
+// 	})
+// 	defer closeDB(t, db)
+// 	_, err = stmt.Exec()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	if err = stmt.Close(); err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	// Stmt.Query
-	db = manyErrBadConnSetup(func(db *ConnPool) {
-		stmt, err = db.Prepare("SELECT|people|age,name|")
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-	defer closeDB(t, db)
-	rows, err = stmt.Query()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = rows.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err = stmt.Close(); err != nil {
-		t.Fatal(err)
-	}
+// 	// Stmt.Query
+// 	db = manyErrBadConnSetup(func(db *ConnPool) {
+// 		stmt, err = db.Prepare("SELECT|people|age,name|")
+// 		if err != nil {
+// 			t.Fatal(err)
+// 		}
+// 	})
+// 	defer closeDB(t, db)
+// 	rows, err = stmt.Query()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	if err = rows.Close(); err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	if err = stmt.Close(); err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	// Conn
-	db = manyErrBadConnSetup()
-	defer closeDB(t, db)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	conn.dc.ci.(*fakeConn).skipDirtySession = true
-	err = conn.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+// 	// Conn
+// 	db = manyErrBadConnSetup()
+// 	defer closeDB(t, db)
+// 	ctx, cancel := context.WithCancel(context.Background())
+// 	defer cancel()
+// 	conn, err := db.Conn(ctx)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	conn.dc.ci.(*fakeConn).skipDirtySession = true
+// 	err = conn.Close()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	// Ping
-	db = manyErrBadConnSetup()
-	defer closeDB(t, db)
-	err = db.PingContext(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
+// 	// Ping
+// 	db = manyErrBadConnSetup()
+// 	defer closeDB(t, db)
+// 	err = db.PingContext(ctx)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// }
 
 // Issue 34775: Ensure that a Tx cannot commit after a rollback.
 func TestTxCannotCommitAfterRollback(t *testing.T) {
@@ -2840,102 +2840,102 @@ func TestTxStmtDeadlock(t *testing.T) {
 
 // Issue32530 encounters an issue where a connection may
 // expire right after it comes out of a used connection pool
-// even when a new connection is requested.
-func TestConnExpiresFreshOutOfPool(t *testing.T) {
-	execCases := []struct {
-		expired  bool
-		badReset bool
-	}{
-		{false, false},
-		{true, false},
-		{false, true},
-	}
+// // even when a new connection is requested.
+// func TestConnExpiresFreshOutOfPool(t *testing.T) {
+// 	execCases := []struct {
+// 		expired  bool
+// 		badReset bool
+// 	}{
+// 		{false, false},
+// 		{true, false},
+// 		{false, true},
+// 	}
 
-	t0 := time.Unix(1000000, 0)
-	offset := time.Duration(0)
-	offsetMu := sync.RWMutex{}
+// 	t0 := time.Unix(1000000, 0)
+// 	offset := time.Duration(0)
+// 	offsetMu := sync.RWMutex{}
 
-	nowFunc = func() time.Time {
-		offsetMu.RLock()
-		defer offsetMu.RUnlock()
-		return t0.Add(offset)
-	}
-	defer func() { nowFunc = time.Now }()
+// 	nowFunc = func() time.Time {
+// 		offsetMu.RLock()
+// 		defer offsetMu.RUnlock()
+// 		return t0.Add(offset)
+// 	}
+// 	defer func() { nowFunc = time.Now }()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+// 	ctx, cancel := context.WithCancel(context.Background())
+// 	defer cancel()
 
-	db := newTestDB(t, "magicquery")
-	defer closeDB(t, db)
+// 	db := newTestDB(t, "magicquery")
+// 	defer closeDB(t, db)
 
-	db.SetMaxOpenConns(1)
+// 	db.SetMaxOpenConns(1)
 
-	for _, ec := range execCases {
-		ec := ec
-		name := fmt.Sprintf("expired=%t,badReset=%t", ec.expired, ec.badReset)
-		t.Run(name, func(t *testing.T) {
-			db.clearAllConns(t)
+// 	for _, ec := range execCases {
+// 		ec := ec
+// 		name := fmt.Sprintf("expired=%t,badReset=%t", ec.expired, ec.badReset)
+// 		t.Run(name, func(t *testing.T) {
+// 			db.clearAllConns(t)
 
-			db.SetMaxIdleConns(1)
-			db.SetConnMaxLifetime(10 * time.Second)
+// 			db.SetMaxIdleConns(1)
+// 			db.SetConnMaxLifetime(10 * time.Second)
 
-			conn, err := db.conn(ctx, alwaysNewConn)
-			if err != nil {
-				t.Fatal(err)
-			}
+// 			conn, err := db.conn(ctx, alwaysNewConn)
+// 			if err != nil {
+// 				t.Fatal(err)
+// 			}
 
-			afterPutConn := make(chan struct{})
-			waitingForConn := make(chan struct{})
+// 			afterPutConn := make(chan struct{})
+// 			waitingForConn := make(chan struct{})
 
-			go func() {
-				defer close(afterPutConn)
+// 			go func() {
+// 				defer close(afterPutConn)
 
-				conn, err := db.conn(ctx, alwaysNewConn)
-				if err == nil {
-					db.putConn(conn, err, false)
-				} else {
-					t.Errorf("connPool.conn: %v", err)
-				}
-			}()
-			go func() {
-				defer close(waitingForConn)
+// 				conn, err := db.conn(ctx, alwaysNewConn)
+// 				if err == nil {
+// 					db.putConn(conn, err, false)
+// 				} else {
+// 					t.Errorf("connPool.conn: %v", err)
+// 				}
+// 			}()
+// 			go func() {
+// 				defer close(waitingForConn)
 
-				for {
-					if t.Failed() {
-						return
-					}
-					db.mu.Lock()
-					ct := len(db.connRequests)
-					db.mu.Unlock()
-					if ct > 0 {
-						return
-					}
-					time.Sleep(10 * time.Millisecond)
-				}
-			}()
+// 				for {
+// 					if t.Failed() {
+// 						return
+// 					}
+// 					db.mu.Lock()
+// 					ct := len(db.connRequests)
+// 					db.mu.Unlock()
+// 					if ct > 0 {
+// 						return
+// 					}
+// 					time.Sleep(10 * time.Millisecond)
+// 				}
+// 			}()
 
-			<-waitingForConn
+// 			<-waitingForConn
 
-			if t.Failed() {
-				return
-			}
+// 			if t.Failed() {
+// 				return
+// 			}
 
-			offsetMu.Lock()
-			if ec.expired {
-				offset = 11 * time.Second
-			} else {
-				offset = time.Duration(0)
-			}
-			offsetMu.Unlock()
+// 			offsetMu.Lock()
+// 			if ec.expired {
+// 				offset = 11 * time.Second
+// 			} else {
+// 				offset = time.Duration(0)
+// 			}
+// 			offsetMu.Unlock()
 
-			conn.ci.(*fakeConn).stickyBad = ec.badReset
+// 			conn.ci.(*fakeConn).stickyBad = ec.badReset
 
-			db.putConn(conn, err, true)
+// 			db.putConn(conn, err, true)
 
-			<-afterPutConn
-		})
-	}
-}
+// 			<-afterPutConn
+// 		})
+// 	}
+// }
 
 // TestIssue20575 ensures the Rows from query does not block
 // closing a transaction. Ensure Rows is closed while closing a trasaction.
@@ -3109,75 +3109,75 @@ func TestErrBadConnReconnect(t *testing.T) {
 }
 
 // golang.org/issue/11264
-func TestTxEndBadConn(t *testing.T) {
-	db := newTestDB(t, "foo")
-	defer closeDB(t, db)
-	db.SetMaxIdleConns(0)
-	exec(t, db, "CREATE|t1|name=string,age=int32,dead=bool")
-	db.SetMaxIdleConns(1)
+// func TestTxEndBadConn(t *testing.T) {
+// 	db := newTestDB(t, "foo")
+// 	defer closeDB(t, db)
+// 	db.SetMaxIdleConns(0)
+// 	exec(t, db, "CREATE|t1|name=string,age=int32,dead=bool")
+// 	db.SetMaxIdleConns(1)
 
-	simulateBadConn := func(name string, hook *func() bool, op func() error) {
-		broken := false
-		numOpen := db.numOpen
+// 	simulateBadConn := func(name string, hook *func() bool, op func() error) {
+// 		broken := false
+// 		numOpen := db.numOpen
 
-		*hook = func() bool {
-			if !broken {
-				broken = true
-			}
-			return broken
-		}
+// 		*hook = func() bool {
+// 			if !broken {
+// 				broken = true
+// 			}
+// 			return broken
+// 		}
 
-		if err := op(); err != driver.ErrBadConn {
-			t.Errorf(name+": %v", err)
-			return
-		}
+// 		if err := op(); err != driver.ErrBadConn {
+// 			t.Errorf(name+": %v", err)
+// 			return
+// 		}
 
-		if !broken {
-			t.Error(name + ": Failed to simulate broken connection")
-		}
-		*hook = nil
+// 		if !broken {
+// 			t.Error(name + ": Failed to simulate broken connection")
+// 		}
+// 		*hook = nil
 
-		if numOpen != db.numOpen {
-			t.Errorf(name+": leaked %d connection(s)!", db.numOpen-numOpen)
-		}
-	}
+// 		if numOpen != db.numOpen {
+// 			t.Errorf(name+": leaked %d connection(s)!", db.numOpen-numOpen)
+// 		}
+// 	}
 
-	// connPool.Exec
-	dbExec := func(endTx func(tx *Tx) error) func() error {
-		return func() error {
-			tx, err := db.Begin()
-			if err != nil {
-				return err
-			}
-			_, err = tx.Exec("INSERT|t1|name=?,age=?,dead=?", "Gordon", 3, true)
-			if err != nil {
-				return err
-			}
-			return endTx(tx)
-		}
-	}
-	simulateBadConn("connPool.Tx.Exec commit", &hookCommitBadConn, dbExec((*Tx).Commit))
-	simulateBadConn("connPool.Tx.Exec rollback", &hookRollbackBadConn, dbExec((*Tx).Rollback))
+// 	// connPool.Exec
+// 	dbExec := func(endTx func(tx *Tx) error) func() error {
+// 		return func() error {
+// 			tx, err := db.Begin()
+// 			if err != nil {
+// 				return err
+// 			}
+// 			_, err = tx.Exec("INSERT|t1|name=?,age=?,dead=?", "Gordon", 3, true)
+// 			if err != nil {
+// 				return err
+// 			}
+// 			return endTx(tx)
+// 		}
+// 	}
+// 	simulateBadConn("connPool.Tx.Exec commit", &hookCommitBadConn, dbExec((*Tx).Commit))
+// 	simulateBadConn("connPool.Tx.Exec rollback", &hookRollbackBadConn, dbExec((*Tx).Rollback))
 
-	// connPool.Query
-	dbQuery := func(endTx func(tx *Tx) error) func() error {
-		return func() error {
-			tx, err := db.Begin()
-			if err != nil {
-				return err
-			}
-			rows, err := tx.Query("SELECT|t1|age,name|")
-			if err == nil {
-				err = rows.Close()
-			} else {
-				return err
-			}
-			return endTx(tx)
-		}
-	}
-	simulateBadConn("connPool.Tx.Query commit", &hookCommitBadConn, dbQuery((*Tx).Commit))
-	simulateBadConn("connPool.Tx.Query rollback", &hookRollbackBadConn, dbQuery((*Tx).Rollback))
-}
+// 	// connPool.Query
+// 	dbQuery := func(endTx func(tx *Tx) error) func() error {
+// 		return func() error {
+// 			tx, err := db.Begin()
+// 			if err != nil {
+// 				return err
+// 			}
+// 			rows, err := tx.Query("SELECT|t1|age,name|")
+// 			if err == nil {
+// 				err = rows.Close()
+// 			} else {
+// 				return err
+// 			}
+// 			return endTx(tx)
+// 		}
+// 	}
+// 	simulateBadConn("connPool.Tx.Query commit", &hookCommitBadConn, dbQuery((*Tx).Commit))
+// 	simulateBadConn("connPool.Tx.Query rollback", &hookRollbackBadConn, dbQuery((*Tx).Rollback))
+// }
 
 type concurrentTest interface {
 	init(t testing.TB, db *ConnPool)
@@ -3768,289 +3768,289 @@ func TestConcurrency(t *testing.T) {
 	}
 }
 
-func TestConnectionLeak(t *testing.T) {
-	db := newTestDB(t, "people")
-	defer closeDB(t, db)
-	// Start by opening defaultMaxIdleConns
-	rows := make([]*Rows, defaultMaxIdleConns)
-	// We need to SetMaxOpenConns > MaxIdleConns, so the ConnPool can open
-	// a new connection and we can fill the idle queue with the released
-	// connections.
-	db.SetMaxOpenConns(len(rows) + 1)
-	for ii := range rows {
-		r, err := db.Query("SELECT|people|name|")
-		if err != nil {
-			t.Fatal(err)
-		}
-		r.Next()
-		if err := r.Err(); err != nil {
-			t.Fatal(err)
-		}
-		rows[ii] = r
-	}
-	// Now we have defaultMaxIdleConns busy connections. Open
-	// a new one, but wait until the busy connections are released
-	// before returning control to ConnPool.
-	drv := db.Driver().(*fakeDriver)
-	drv.waitCh = make(chan struct{}, 1)
-	drv.waitingCh = make(chan struct{}, 1)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		r, err := db.Query("SELECT|people|name|")
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		r.Close()
-		wg.Done()
-	}()
-	// Wait until the goroutine we've just created has started waiting.
-	<-drv.waitingCh
-	// Now close the busy connections. This provides a connection for
-	// the blocked goroutine and then fills up the idle queue.
-	for _, v := range rows {
-		v.Close()
-	}
-	// At this point we give the new connection to ConnPool. This connection is
-	// now useless, since the idle queue is full and there are no pending
-	// requests. ConnPool should deal with this situation without leaking the
-	// connection.
-	drv.waitCh <- struct{}{}
-	wg.Wait()
-}
+// func TestConnectionLeak(t *testing.T) {
+// 	db := newTestDB(t, "people")
+// 	defer closeDB(t, db)
+// 	// Start by opening defaultMaxIdleConns
+// 	rows := make([]*Rows, defaultMaxIdleConns)
+// 	// We need to SetMaxOpenConns > MaxIdleConns, so the ConnPool can open
+// 	// a new connection and we can fill the idle queue with the released
+// 	// connections.
+// 	db.SetMaxOpenConns(len(rows) + 1)
+// 	for ii := range rows {
+// 		r, err := db.Query("SELECT|people|name|")
+// 		if err != nil {
+// 			t.Fatal(err)
+// 		}
+// 		r.Next()
+// 		if err := r.Err(); err != nil {
+// 			t.Fatal(err)
+// 		}
+// 		rows[ii] = r
+// 	}
+// 	// Now we have defaultMaxIdleConns busy connections. Open
+// 	// a new one, but wait until the busy connections are released
+// 	// before returning control to ConnPool.
+// 	drv := db.Driver().(*fakeDriver)
+// 	drv.waitCh = make(chan struct{}, 1)
+// 	drv.waitingCh = make(chan struct{}, 1)
+// 	var wg sync.WaitGroup
+// 	wg.Add(1)
+// 	go func() {
+// 		r, err := db.Query("SELECT|people|name|")
+// 		if err != nil {
+// 			t.Error(err)
+// 			return
+// 		}
+// 		r.Close()
+// 		wg.Done()
+// 	}()
+// 	// Wait until the goroutine we've just created has started waiting.
+// 	<-drv.waitingCh
+// 	// Now close the busy connections. This provides a connection for
+// 	// the blocked goroutine and then fills up the idle queue.
+// 	for _, v := range rows {
+// 		v.Close()
+// 	}
+// 	// At this point we give the new connection to ConnPool. This connection is
+// 	// now useless, since the idle queue is full and there are no pending
+// 	// requests. ConnPool should deal with this situation without leaking the
+// 	// connection.
+// 	drv.waitCh <- struct{}{}
+// 	wg.Wait()
+// }
 
-func TestStatsMaxIdleClosedZero(t *testing.T) {
-	db := newTestDB(t, "people")
-	defer closeDB(t, db)
+// func TestStatsMaxIdleClosedZero(t *testing.T) {
+// 	db := newTestDB(t, "people")
+// 	defer closeDB(t, db)
 
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	db.SetConnMaxLifetime(0)
+// 	db.SetMaxOpenConns(1)
+// 	db.SetMaxIdleConns(1)
+// 	db.SetConnMaxLifetime(0)
 
-	preMaxIdleClosed := db.Stats().MaxIdleClosed
+// 	preMaxIdleClosed := db.Stats().MaxIdleClosed
 
-	for i := 0; i < 10; i++ {
-		rows, err := db.Query("SELECT|people|name|")
-		if err != nil {
-			t.Fatal(err)
-		}
-		rows.Close()
-	}
+// 	for i := 0; i < 10; i++ {
+// 		rows, err := db.Query("SELECT|people|name|")
+// 		if err != nil {
+// 			t.Fatal(err)
+// 		}
+// 		rows.Close()
+// 	}
 
-	st := db.Stats()
-	maxIdleClosed := st.MaxIdleClosed - preMaxIdleClosed
-	t.Logf("MaxIdleClosed: %d", maxIdleClosed)
-	if maxIdleClosed != 0 {
-		t.Fatal("expected 0 max idle closed conns, got: ", maxIdleClosed)
-	}
-}
+// 	st := db.Stats()
+// 	maxIdleClosed := st.MaxIdleClosed - preMaxIdleClosed
+// 	t.Logf("MaxIdleClosed: %d", maxIdleClosed)
+// 	if maxIdleClosed != 0 {
+// 		t.Fatal("expected 0 max idle closed conns, got: ", maxIdleClosed)
+// 	}
+// }
 
-func TestStatsMaxIdleClosedTen(t *testing.T) {
-	db := newTestDB(t, "people")
-	defer closeDB(t, db)
+// func TestStatsMaxIdleClosedTen(t *testing.T) {
+// 	db := newTestDB(t, "people")
+// 	defer closeDB(t, db)
 
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(0)
-	db.SetConnMaxLifetime(0)
+// 	db.SetMaxOpenConns(1)
+// 	db.SetMaxIdleConns(0)
+// 	db.SetConnMaxLifetime(0)
 
-	preMaxIdleClosed := db.Stats().MaxIdleClosed
+// 	preMaxIdleClosed := db.Stats().MaxIdleClosed
 
-	for i := 0; i < 10; i++ {
-		rows, err := db.Query("SELECT|people|name|")
-		if err != nil {
-			t.Fatal(err)
-		}
-		rows.Close()
-	}
+// 	for i := 0; i < 10; i++ {
+// 		rows, err := db.Query("SELECT|people|name|")
+// 		if err != nil {
+// 			t.Fatal(err)
+// 		}
+// 		rows.Close()
+// 	}
 
-	st := db.Stats()
-	maxIdleClosed := st.MaxIdleClosed - preMaxIdleClosed
-	t.Logf("MaxIdleClosed: %d", maxIdleClosed)
-	if maxIdleClosed != 10 {
-		t.Fatal("expected 0 max idle closed conns, got: ", maxIdleClosed)
-	}
-}
+// 	st := db.Stats()
+// 	maxIdleClosed := st.MaxIdleClosed - preMaxIdleClosed
+// 	t.Logf("MaxIdleClosed: %d", maxIdleClosed)
+// 	if maxIdleClosed != 10 {
+// 		t.Fatal("expected 0 max idle closed conns, got: ", maxIdleClosed)
+// 	}
+// }
 
-func TestMaxIdleTime(t *testing.T) {
-	list := []struct {
-		wantMaxIdleTime time.Duration
-		wantIdleClosed  int64
-		timeOffset      time.Duration
-	}{
-		{time.Nanosecond, 1, 10 * time.Millisecond},
-		{time.Hour, 0, 10 * time.Millisecond},
-	}
-	baseTime := time.Unix(0, 0)
-	defer func() {
-		nowFunc = time.Now
-	}()
-	for _, item := range list {
-		nowFunc = func() time.Time {
-			return baseTime
-		}
-		t.Run(fmt.Sprintf("%v", item.wantMaxIdleTime), func(t *testing.T) {
-			db := newTestDB(t, "people")
-			defer closeDB(t, db)
+// func TestMaxIdleTime(t *testing.T) {
+// 	list := []struct {
+// 		wantMaxIdleTime time.Duration
+// 		wantIdleClosed  int64
+// 		timeOffset      time.Duration
+// 	}{
+// 		{time.Nanosecond, 1, 10 * time.Millisecond},
+// 		{time.Hour, 0, 10 * time.Millisecond},
+// 	}
+// 	baseTime := time.Unix(0, 0)
+// 	defer func() {
+// 		nowFunc = time.Now
+// 	}()
+// 	for _, item := range list {
+// 		nowFunc = func() time.Time {
+// 			return baseTime
+// 		}
+// 		t.Run(fmt.Sprintf("%v", item.wantMaxIdleTime), func(t *testing.T) {
+// 			db := newTestDB(t, "people")
+// 			defer closeDB(t, db)
 
-			db.SetMaxOpenConns(1)
-			db.SetMaxIdleConns(1)
-			db.SetConnMaxIdleTime(item.wantMaxIdleTime)
-			db.SetConnMaxLifetime(0)
+// 			db.SetMaxOpenConns(1)
+// 			db.SetMaxIdleConns(1)
+// 			db.SetConnMaxIdleTime(item.wantMaxIdleTime)
+// 			db.SetConnMaxLifetime(0)
 
-			preMaxIdleClosed := db.Stats().MaxIdleTimeClosed
+// 			preMaxIdleClosed := db.Stats().MaxIdleTimeClosed
 
-			if err := db.Ping(); err != nil {
-				t.Fatal(err)
-			}
+// 			if err := db.Ping(); err != nil {
+// 				t.Fatal(err)
+// 			}
 
-			nowFunc = func() time.Time {
-				return baseTime.Add(item.timeOffset)
-			}
+// 			nowFunc = func() time.Time {
+// 				return baseTime.Add(item.timeOffset)
+// 			}
 
-			db.mu.Lock()
-			closing := db.connectionCleanerRunLocked()
-			db.mu.Unlock()
-			for _, c := range closing {
-				c.Close()
-			}
-			if g, w := int64(len(closing)), item.wantIdleClosed; g != w {
-				t.Errorf("got: %d; want %d closed conns", g, w)
-			}
+// 			db.mu.Lock()
+// 			closing := db.connectionCleanerRunLocked()
+// 			db.mu.Unlock()
+// 			for _, c := range closing {
+// 				c.Close()
+// 			}
+// 			if g, w := int64(len(closing)), item.wantIdleClosed; g != w {
+// 				t.Errorf("got: %d; want %d closed conns", g, w)
+// 			}
 
-			st := db.Stats()
-			maxIdleClosed := st.MaxIdleTimeClosed - preMaxIdleClosed
-			if g, w := maxIdleClosed, item.wantIdleClosed; g != w {
-				t.Errorf(" got: %d; want %d max idle closed conns", g, w)
-			}
-		})
-	}
-}
+// 			st := db.Stats()
+// 			maxIdleClosed := st.MaxIdleTimeClosed - preMaxIdleClosed
+// 			if g, w := maxIdleClosed, item.wantIdleClosed; g != w {
+// 				t.Errorf(" got: %d; want %d max idle closed conns", g, w)
+// 			}
+// 		})
+// 	}
+// }
 
-type nvcDriver struct {
-	fakeDriver
-	skipNamedValueCheck bool
-}
+// type nvcDriver struct {
+// 	fakeDriver
+// 	skipNamedValueCheck bool
+// }
 
-func (d *nvcDriver) Open(dsn string) (driver.Conn, error) {
-	c, err := d.fakeDriver.Open(dsn)
-	fc := c.(*fakeConn)
-	fc.db.allowAny = true
-	return &nvcConn{fc, d.skipNamedValueCheck}, err
-}
+// func (d *nvcDriver) Open(dsn string) (driver.Conn, error) {
+// 	c, err := d.fakeDriver.Open(dsn)
+// 	fc := c.(*fakeConn)
+// 	fc.db.allowAny = true
+// 	return &nvcConn{fc, d.skipNamedValueCheck}, err
+// }
 
-type nvcConn struct {
-	*fakeConn
-	skipNamedValueCheck bool
-}
+// type nvcConn struct {
+// 	*fakeConn
+// 	skipNamedValueCheck bool
+// }
 
-type decimalInt struct {
-	value int
-}
+// type decimalInt struct {
+// 	value int
+// }
 
-type doNotInclude struct{}
+// type doNotInclude struct{}
 
-var _ driver.NamedValueChecker = &nvcConn{}
+// var _ driver.NamedValueChecker = &nvcConn{}
 
-func (c *nvcConn) CheckNamedValue(nv *driver.NamedValue) error {
-	if c.skipNamedValueCheck {
-		return driver.ErrSkip
-	}
-	switch v := nv.Value.(type) {
-	default:
-		return driver.ErrSkip
-	case Out:
-		switch ov := v.Dest.(type) {
-		default:
-			return errors.New("unknown NameValueCheck OUTPUT type")
-		case *string:
-			*ov = "from-server"
-			nv.Value = "OUT:*string"
-		}
-		return nil
-	case decimalInt, []int64:
-		return nil
-	case doNotInclude:
-		return driver.ErrRemoveArgument
-	}
-}
+// func (c *nvcConn) CheckNamedValue(nv *driver.NamedValue) error {
+// 	if c.skipNamedValueCheck {
+// 		return driver.ErrSkip
+// 	}
+// 	switch v := nv.Value.(type) {
+// 	default:
+// 		return driver.ErrSkip
+// 	case Out:
+// 		switch ov := v.Dest.(type) {
+// 		default:
+// 			return errors.New("unknown NameValueCheck OUTPUT type")
+// 		case *string:
+// 			*ov = "from-server"
+// 			nv.Value = "OUT:*string"
+// 		}
+// 		return nil
+// 	case decimalInt, []int64:
+// 		return nil
+// 	case doNotInclude:
+// 		return driver.ErrRemoveArgument
+// 	}
+// }
 
-func TestNamedValueChecker(t *testing.T) {
-	Register("NamedValueCheck", &nvcDriver{})
-	db, err := Open("NamedValueCheck", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+// func TestNamedValueChecker(t *testing.T) {
+// 	Register("NamedValueCheck", &nvcDriver{})
+// 	db, err := Open("NamedValueCheck", "")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	defer db.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+// 	ctx, cancel := context.WithCancel(context.Background())
+// 	defer cancel()
 
-	_, err = db.ExecContext(ctx, "WIPE")
-	if err != nil {
-		t.Fatal("exec wipe", err)
-	}
+// 	_, err = db.ExecContext(ctx, "WIPE")
+// 	if err != nil {
+// 		t.Fatal("exec wipe", err)
+// 	}
 
-	_, err = db.ExecContext(ctx, "CREATE|keys|dec1=any,str1=string,out1=string,array1=any")
-	if err != nil {
-		t.Fatal("exec create", err)
-	}
+// 	_, err = db.ExecContext(ctx, "CREATE|keys|dec1=any,str1=string,out1=string,array1=any")
+// 	if err != nil {
+// 		t.Fatal("exec create", err)
+// 	}
 
-	o1 := ""
-	_, err = db.ExecContext(ctx, "INSERT|keys|dec1=?A,str1=?,out1=?O1,array1=?", Named("A", decimalInt{123}), "hello", Named("O1", Out{Dest: &o1}), []int64{42, 128, 707}, doNotInclude{})
-	if err != nil {
-		t.Fatal("exec insert", err)
-	}
-	var (
-		str1 string
-		dec1 decimalInt
-		arr1 []int64
-	)
-	err = db.QueryRowContext(ctx, "SELECT|keys|dec1,str1,array1|").Scan(&dec1, &str1, &arr1)
-	if err != nil {
-		t.Fatal("select", err)
-	}
+// 	o1 := ""
+// 	_, err = db.ExecContext(ctx, "INSERT|keys|dec1=?A,str1=?,out1=?O1,array1=?", Named("A", decimalInt{123}), "hello", Named("O1", Out{Dest: &o1}), []int64{42, 128, 707}, doNotInclude{})
+// 	if err != nil {
+// 		t.Fatal("exec insert", err)
+// 	}
+// 	var (
+// 		str1 string
+// 		dec1 decimalInt
+// 		arr1 []int64
+// 	)
+// 	err = db.QueryRowContext(ctx, "SELECT|keys|dec1,str1,array1|").Scan(&dec1, &str1, &arr1)
+// 	if err != nil {
+// 		t.Fatal("select", err)
+// 	}
 
-	list := []struct{ got, want interface{} }{
-		{o1, "from-server"},
-		{dec1, decimalInt{123}},
-		{str1, "hello"},
-		{arr1, []int64{42, 128, 707}},
-	}
+// 	list := []struct{ got, want interface{} }{
+// 		{o1, "from-server"},
+// 		{dec1, decimalInt{123}},
+// 		{str1, "hello"},
+// 		{arr1, []int64{42, 128, 707}},
+// 	}
 
-	for index, item := range list {
-		if !reflect.DeepEqual(item.got, item.want) {
-			t.Errorf("got %#v wanted %#v for index %d", item.got, item.want, index)
-		}
-	}
-}
+// 	for index, item := range list {
+// 		if !reflect.DeepEqual(item.got, item.want) {
+// 			t.Errorf("got %#v wanted %#v for index %d", item.got, item.want, index)
+// 		}
+// 	}
+// }
 
-func TestNamedValueCheckerSkip(t *testing.T) {
-	Register("NamedValueCheckSkip", &nvcDriver{skipNamedValueCheck: true})
-	db, err := Open("NamedValueCheckSkip", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+// func TestNamedValueCheckerSkip(t *testing.T) {
+// 	Register("NamedValueCheckSkip", &nvcDriver{skipNamedValueCheck: true})
+// 	db, err := Open("NamedValueCheckSkip", "")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	defer db.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+// 	ctx, cancel := context.WithCancel(context.Background())
+// 	defer cancel()
 
-	_, err = db.ExecContext(ctx, "WIPE")
-	if err != nil {
-		t.Fatal("exec wipe", err)
-	}
+// 	_, err = db.ExecContext(ctx, "WIPE")
+// 	if err != nil {
+// 		t.Fatal("exec wipe", err)
+// 	}
 
-	_, err = db.ExecContext(ctx, "CREATE|keys|dec1=any")
-	if err != nil {
-		t.Fatal("exec create", err)
-	}
+// 	_, err = db.ExecContext(ctx, "CREATE|keys|dec1=any")
+// 	if err != nil {
+// 		t.Fatal("exec create", err)
+// 	}
 
-	_, err = db.ExecContext(ctx, "INSERT|keys|dec1=?A", Named("A", decimalInt{123}))
-	if err == nil {
-		t.Fatalf("expected error with bad argument, got %v", err)
-	}
-}
+// 	_, err = db.ExecContext(ctx, "INSERT|keys|dec1=?A", Named("A", decimalInt{123}))
+// 	if err == nil {
+// 		t.Fatalf("expected error with bad argument, got %v", err)
+// 	}
+// }
 
 func TestOpenConnector(t *testing.T) {
 	Register("testctx", &fakeDriverCtx{})
@@ -4395,30 +4395,30 @@ func BenchmarkConcurrentRandom(b *testing.B) {
 	}
 }
 
-func BenchmarkManyConcurrentQueries(b *testing.B) {
-	b.ReportAllocs()
-	// To see lock contention in Go 1.4, 16~ cores and 128~ goroutines are required.
-	const parallelism = 16
+// func BenchmarkManyConcurrentQueries(b *testing.B) {
+// 	b.ReportAllocs()
+// 	// To see lock contention in Go 1.4, 16~ cores and 128~ goroutines are required.
+// 	const parallelism = 16
 
-	db := newTestDB(b, "magicquery")
-	defer closeDB(b, db)
-	db.SetMaxIdleConns(runtime.GOMAXPROCS(0) * parallelism)
+// 	db := newTestDB(b, "magicquery")
+// 	defer closeDB(b, db)
+// 	db.SetMaxIdleConns(runtime.GOMAXPROCS(0) * parallelism)
 
-	stmt, err := db.Prepare("SELECT|magicquery|op|op=?,millis=?")
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer stmt.Close()
+// 	stmt, err := db.Prepare("SELECT|magicquery|op|op=?,millis=?")
+// 	if err != nil {
+// 		b.Fatal(err)
+// 	}
+// 	defer stmt.Close()
 
-	b.SetParallelism(parallelism)
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			rows, err := stmt.Query("sleep", 1)
-			if err != nil {
-				b.Error(err)
-				return
-			}
-			rows.Close()
-		}
-	})
-}
+// 	b.SetParallelism(parallelism)
+// 	b.RunParallel(func(pb *testing.PB) {
+// 		for pb.Next() {
+// 			rows, err := stmt.Query("sleep", 1)
+// 			if err != nil {
+// 				b.Error(err)
+// 				return
+// 			}
+// 			rows.Close()
+// 		}
+// 	})
+// }

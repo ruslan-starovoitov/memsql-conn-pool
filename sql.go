@@ -1398,11 +1398,14 @@ func (connPool *ConnPool) putConnDBLocked(dc *driverConn, err error) bool {
 		return false
 	}
 	if c := len(connPool.poolManager.connRequests); c > 0 {
-		var req chan connCreationResponse
 		var reqKey uint64
-		for reqKey, req = range connPool.poolManager.connRequests {
+		var req chan connCreationResponse
+		for key, value := range connPool.poolManager.connRequests {
+			reqKey = key
+			req = value.responce
 			break
 		}
+
 		delete(connPool.poolManager.connRequests, reqKey) // Remove from pending requests.
 		if err == nil {
 			dc.inUse = true

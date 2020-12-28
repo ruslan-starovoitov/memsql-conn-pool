@@ -3,6 +3,7 @@ package memsql_conn_pool
 import (
 	"context"
 	"github.com/orcaman/concurrent-map"
+	"sync"
 	"time"
 )
 
@@ -12,13 +13,19 @@ type PoolManager struct {
 	pools cmap.ConcurrentMap
 	ctx   context.Context
 
-	totalMax  int
-	numIdle   int
-	numActive int
+	totalMax int
+	numIdle  int
+	numOpen  int
 
 	idleTimeout time.Duration
 	cancel      context.CancelFunc
 
+	closed bool
+
+	mu sync.Mutex // protects following fields
+	//для запросов на создание новых соединений
+	connRequests  map[uint64]chan connRequest
+	nextRequest   uint64 // Next key to use in connRequests.
 	openerChannel chan *ConnPool
 }
 
@@ -103,5 +110,36 @@ func (poolManager *PoolManager) getOrCreateConnPool(credentials Credentials) (*C
 }
 
 func (poolManager *PoolManager) isOpenConnectionLimitExceeded() bool {
-	return poolManager.totalMax <= poolManager.numIdle+poolManager.numActive
+	return poolManager.totalMax <= poolManager.numIdle+poolManager.numOpen
+}
+
+// nextRequestKeyLocked returns the next connection request key.
+// It is assumed that nextRequest will not overflow.
+func (poolManager *PoolManager) nextRequestKeyLocked() uint64 {
+	next := poolManager.nextRequest
+	poolManager.nextRequest++
+	return next
+}
+
+// Assumes poolManager.mu is locked.
+// If there are connRequests and the connection limit hasn't been reached,
+// then tell the connectionOpener to open new connections.
+func (poolManager *PoolManager) maybeOpenNewConnections() {
+	numRequests := len(poolManager.connRequests)
+	if poolManager.totalMax > 0 {
+		numCanOpen := poolManager.totalMax - poolManager.numOpen
+		if numCanOpen < numRequests {
+			numRequests = numCanOpen
+		}
+	}
+	for numRequests > 0 {
+		poolManager.numOpen++ // optimistically
+		numRequests--
+		if poolManager.closed {
+			return
+		}
+
+		//Дать команду создать соединение для конкретного пула
+		poolManager.openerChannel <- struct{}{}
+	}
 }

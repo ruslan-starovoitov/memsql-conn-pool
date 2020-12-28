@@ -572,6 +572,7 @@ func (dc *driverConn) Close() error {
 	return fn()
 }
 
+//TODO изучить / закрытие соединения
 func (dc *driverConn) finalClose() error {
 	var err error
 
@@ -596,6 +597,7 @@ func (dc *driverConn) finalClose() error {
 
 	dc.db.mu.Lock()
 	dc.db.numOpen--
+	//TODO попытка открыть новые соединения
 	dc.db.maybeOpenNewConnections()
 	dc.db.mu.Unlock()
 
@@ -730,7 +732,7 @@ func (t dsnConnector) Driver() driver.Driver {
 // close a ConnPool.
 func OpenDB(c driver.Connector) *ConnPool {
 	ctx, cancel := context.WithCancel(context.Background())
-	db := &ConnPool{
+	connPool := &ConnPool{
 		connector:    c,
 		openerCh:     make(chan struct{}, connectionRequestQueueSize),
 		lastPut:      make(map[*driverConn]string),
@@ -738,9 +740,9 @@ func OpenDB(c driver.Connector) *ConnPool {
 		stop:         cancel,
 	}
 
-	go db.connectionOpener(ctx)
+	go connPool.connectionOpener(ctx)
 
-	return db
+	return connPool
 }
 
 // Open opens a database specified by its database driver name and a
@@ -1107,6 +1109,8 @@ func (connPool *ConnPool) Stats() DBStats {
 	return stats
 }
 
+// TODO просит создать запрошеное кол-во соединений у другой горутины
+// TODO откуда вызывается?
 // Assumes db.mu is locked.
 // If there are connRequests and the connection limit hasn't been reached,
 // then tell the connectionOpener to open new connections.
@@ -1114,7 +1118,7 @@ func (connPool *ConnPool) maybeOpenNewConnections() {
 	numRequests := len(connPool.connRequests)
 	if connPool.maxOpen > 0 {
 		numCanOpen := connPool.maxOpen - connPool.numOpen
-		if numRequests > numCanOpen {
+		if numCanOpen < numRequests {
 			numRequests = numCanOpen
 		}
 	}
@@ -1129,7 +1133,9 @@ func (connPool *ConnPool) maybeOpenNewConnections() {
 }
 
 // Runs in a separate goroutine, opens new connections when requested.
+// TODO убрать запускается параллелльно с созданием нового пула
 func (connPool *ConnPool) connectionOpener(ctx context.Context) {
+	//ждём пока контекст закроется или попросят открыть новое соединение
 	for {
 		select {
 		case <-ctx.Done():
@@ -1140,6 +1146,7 @@ func (connPool *ConnPool) connectionOpener(ctx context.Context) {
 	}
 }
 
+//TODO метод создаёт новое соединение/ вызывается из connectionOpener горутины
 // Open one new connection
 func (connPool *ConnPool) openNewConnection(ctx context.Context) {
 	// maybeOpenNewConnections has already executed connPool.numOpen++ before it sent
@@ -1158,6 +1165,7 @@ func (connPool *ConnPool) openNewConnection(ctx context.Context) {
 	if err != nil {
 		connPool.numOpen--
 		connPool.putConnDBLocked(nil, err)
+		//TODO странно / попытка открыть новые соединения
 		connPool.maybeOpenNewConnections()
 		return
 	}
@@ -1235,7 +1243,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 
 	// Out of free connections or we were asked not to use one. If we're not
 	// allowed to open any more connections, make a request and wait.
-	if connPool.maxOpen > 0 && connPool.numOpen >= connPool.maxOpen {
+	if connPool.maxOpen > 0 && connPool.maxOpen <= connPool.numOpen {
 		// Make the connRequest channel. It's buffered so that the
 		// connectionOpener doesn't block while waiting for the req to be read.
 		req := make(chan connRequest, 1)
@@ -1303,6 +1311,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 	if err != nil {
 		connPool.mu.Lock()
 		connPool.numOpen-- // correct for earlier optimism
+		//TODO попытка открть новые соедиения
 		connPool.maybeOpenNewConnections()
 		connPool.mu.Unlock()
 		return nil, err
@@ -1347,6 +1356,7 @@ func (connPool *ConnPool) noteUnusedDriverStatement(c *driverConn, ds *driverStm
 // are returned for more verbose crashes.
 const debugGetPut = false
 
+// TODO изучить / кладёт соединение в пулл / вызывает создание новых соединений
 // putConn adds a connection to the db's free pool.
 // err is optionally the last error that occurred on this connection.
 func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) {

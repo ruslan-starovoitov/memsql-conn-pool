@@ -2,7 +2,6 @@ package memsql_conn_pool
 
 import (
 	"context"
-	"errors"
 	"github.com/orcaman/concurrent-map"
 	"time"
 )
@@ -13,9 +12,9 @@ type PoolManager struct {
 	pools cmap.ConcurrentMap
 	ctx   context.Context
 
-	totalMax    int
-	currentIdle int
-	numActive   int
+	totalMax  int
+	numIdle   int
+	numActive int
 
 	idleTimeout time.Duration
 	cancel      context.CancelFunc
@@ -84,8 +83,6 @@ func (poolManager *PoolManager) ClosePool() {
 	poolManager.cancel()
 }
 
-var unableToGetPool = errors.New("unable get pool from map")
-
 func (poolManager *PoolManager) getOrCreateConnPool(credentials Credentials) (*ConnPool, error) {
 	//Create pool if not exists
 	if !poolManager.pools.Has(credentials.GetId()) {
@@ -103,4 +100,8 @@ func (poolManager *PoolManager) getOrCreateConnPool(credentials Credentials) (*C
 		return tmp.(*ConnPool), nil
 	}
 	return nil, unableToGetPool
+}
+
+func (poolManager *PoolManager) isOpenConnectionLimitExceeded() bool {
+	return poolManager.totalMax <= poolManager.numIdle+poolManager.numActive
 }

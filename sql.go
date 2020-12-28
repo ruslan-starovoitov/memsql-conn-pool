@@ -400,6 +400,8 @@ var ErrNoRows = errors.New("sql: no rows in result set")
 // connection is returned to ConnPool's idle connection pool. The pool size
 // can be controlled with SetMaxIdleConns.
 type ConnPool struct {
+	poolManager *PoolManager
+
 	// Atomic access only. At top of struct to prevent mis-alignment
 	// on 32-bit platforms. Of type time.Duration.
 	waitDuration int64 // Total time waited for new connections.
@@ -1225,9 +1227,9 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 
 	// Prefer a free connection, if possible.
 	numFree := len(connPool.freeConn)
-	if strategy == cachedOrNewConn && numFree > 0 {
-
-		//remove connection from free slice
+	canUseIdleConnection := strategy == cachedOrNewConn && numFree > 0
+	if canUseIdleConnection {
+		//remove idle connection from slice
 		conn := connPool.freeConn[0]
 		copy(connPool.freeConn, connPool.freeConn[1:])
 		connPool.freeConn = connPool.freeConn[:numFree-1]
@@ -1254,12 +1256,13 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		return conn, nil
 	}
 
-	// Out of free connections or we were asked not to use one. If we're not
-	// allowed to open any more connections, make a request and wait.
-	//if connPool.maxOpen > 0 && connPool.maxOpen <= connPool.numOpen {
-	if connPool.maxOpen > 0 && connPool.maxOpen <= connPool.numOpen {
+	if connPool.poolManager.isOpenConnectionLimitExceeded() {
+		// TODO try to remove idle connection from another connection pool and
+		//  wait for free connection
+
 		// Make the connRequest channel. It's buffered so that the
 		// connectionOpener doesn't block while waiting for the req to be read.
+
 		req := make(chan connRequest, 1)
 		reqKey := connPool.nextRequestKeyLocked()
 		connPool.connRequests[reqKey] = req
@@ -1270,6 +1273,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 
 		// Timeout the connection request with the context.
 		select {
+		//Context expired
 		case <-ctx.Done():
 			// Remove the connection request and ensure no value has been sent
 			// on it after removing.
@@ -1281,7 +1285,9 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 
 			select {
 			default:
+			//And new connection was created
 			case ret, ok := <-req:
+				//put connection to free slice
 				if ok && ret.conn != nil {
 					connPool.putConn(ret.conn, ret.err, false)
 				}
@@ -1325,7 +1331,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 	if err != nil {
 		connPool.mu.Lock()
 		connPool.numOpen-- // correct for earlier optimism
-		//TODO попытка открть новые соедиения
+		//TODO попытка открыть новые соедиения
 		connPool.maybeOpenNewConnections()
 		connPool.mu.Unlock()
 		return nil, err

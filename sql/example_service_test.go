@@ -6,6 +6,7 @@ package sql_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,7 +17,7 @@ import (
 
 func Example_openDBService() {
 	// Opening a driver typically will not attempt to connect to the database.
-	db, err := Open("driver-name", "database=test1")
+	db, err := sql.Open("driver-name", "database=test1")
 	if err != nil {
 		// This will not be a connection error, but a DSN parse error or
 		// another initialization error.
@@ -32,7 +33,7 @@ func Example_openDBService() {
 }
 
 type Service struct {
-	db *ConnPool
+	db *sql.DB
 }
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -71,11 +72,11 @@ where
 	p.id = :id
 	and o.id = :org
 ;`,
-			Named("id", id),
-			Named("org", org),
+			sql.Named("id", id),
+			sql.Named("org", org),
 		).Scan(&name)
 		if err != nil {
-			if err == ErrNoRows {
+			if err == sql.ErrNoRows {
 				http.Error(w, "not found", http.StatusNotFound)
 				return
 			}
@@ -138,7 +139,7 @@ where
 		defer cancel()
 
 		var orderRef = "ABC123"
-		tx, err := db.BeginTx(ctx, &TxOptions{Isolation: LevelSerializable})
+		tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 		_, err = tx.ExecContext(ctx, "stored_proc_name", orderRef)
 
 		if err != nil {

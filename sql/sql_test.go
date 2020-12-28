@@ -6,11 +6,10 @@ package sql
 
 import (
 	"context"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"math/rand"
-	"memsql-conn-pool/driver"
-	"memsql-conn-pool/sql/namedArg.go"
 	"reflect"
 	"runtime"
 	"strings"
@@ -23,7 +22,7 @@ import (
 func init() {
 	type dbConn struct {
 		db *ConnPool
-		c  *namedArg_go.driverConn
+		c  *driverConn
 	}
 	freedFrom := make(map[dbConn]string)
 	var mu sync.Mutex
@@ -37,7 +36,7 @@ func init() {
 		defer mu.Unlock()
 		freedFrom[c] = s
 	}
-	namedArg_go.putConnHook = func(db *ConnPool, c *namedArg_go.driverConn) {
+	putConnHook = func(db *ConnPool, c *driverConn) {
 		idx := -1
 		for i, v := range db.freeConn {
 			if v == c {
@@ -49,10 +48,10 @@ func init() {
 			// print before panic, as panic may get lost due to conflicting panic
 			// (all goroutines asleep) elsewhere, since we might not unlock
 			// the mutex in freeConn here.
-			println("double free of conn. conflicts are:\nA) " + getFreedFrom(dbConn{db, c}) + "\n\nand\nB) " + namedArg_go.stack())
+			println("double free of conn. conflicts are:\nA) " + getFreedFrom(dbConn{db, c}) + "\n\nand\nB) " + stack())
 			panic("double free of conn.")
 		}
-		setFreedFrom(dbConn{db, c}, namedArg_go.stack())
+		setFreedFrom(dbConn{db, c}, stack())
 	}
 }
 
@@ -90,7 +89,7 @@ func newTestDBConnector(t testing.TB, fc *fakeConnector, name string) *ConnPool 
 }
 
 func TestOpenDB(t *testing.T) {
-	db := OpenDB(namedArg_go.dsnConnector{dsn: fakeDBName, driver: fdriver})
+	db := OpenDB(dsnConnector{dsn: fakeDBName, driver: fdriver})
 	if db.Driver() != fdriver {
 		t.Fatalf("OpenDB should return the driver of the Connector")
 	}
@@ -191,7 +190,7 @@ func numPrepares(t *testing.T, db *ConnPool) int {
 	return db.freeConn[0].ci.(*fakeConn).numPrepare
 }
 
-func (db *namedArg_go.DB) numDeps() int {
+func (db *ConnPool) numDeps() int {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	return len(db.dep)
@@ -199,7 +198,7 @@ func (db *namedArg_go.DB) numDeps() int {
 
 // Dependencies are closed via a goroutine, so this polls waiting for
 // numDeps to fall to want, waiting up to d.
-func (db *namedArg_go.DB) numDepsPollUntil(want int, d time.Duration) int {
+func (db *ConnPool) numDepsPollUntil(want int, d time.Duration) int {
 	deadline := time.Now().Add(d)
 	for {
 		n := db.numDeps()
@@ -210,20 +209,20 @@ func (db *namedArg_go.DB) numDepsPollUntil(want int, d time.Duration) int {
 	}
 }
 
-func (db *namedArg_go.DB) numFreeConns() int {
+func (db *ConnPool) numFreeConns() int {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	return len(db.freeConn)
 }
 
-func (db *namedArg_go.DB) numOpenConns() int {
+func (db *ConnPool) numOpenConns() int {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	return db.numOpen
 }
 
 // clearAllConns closes all connections in db.
-func (db *namedArg_go.DB) clearAllConns(t *testing.T) {
+func (db *ConnPool) clearAllConns(t *testing.T) {
 	db.SetMaxIdleConns(0)
 
 	if g, w := db.numFreeConns(), 0; g != w {
@@ -236,19 +235,19 @@ func (db *namedArg_go.DB) clearAllConns(t *testing.T) {
 	}
 }
 
-func (db *namedArg_go.DB) dumpDeps(t *testing.T) {
+func (db *ConnPool) dumpDeps(t *testing.T) {
 	for fc := range db.dep {
-		db.dumpDep(t, 0, fc, map[namedArg_go.finalCloser]bool{})
+		db.dumpDep(t, 0, fc, map[finalCloser]bool{})
 	}
 }
 
-func (db *namedArg_go.DB) dumpDep(t *testing.T, depth int, dep namedArg_go.finalCloser, seen map[namedArg_go.finalCloser]bool) {
+func (db *ConnPool) dumpDep(t *testing.T, depth int, dep finalCloser, seen map[finalCloser]bool) {
 	seen[dep] = true
 	indent := strings.Repeat("  ", depth)
 	ds := db.dep[dep]
 	for k := range ds {
 		t.Logf("%s%T (%p) waiting for -> %T (%p)", indent, dep, dep, k, k)
-		if fc, ok := k.(namedArg_go.finalCloser); ok {
+		if fc, ok := k.(finalCloser); ok {
 			if !seen[fc] {
 				db.dumpDep(t, depth+1, fc, seen)
 			}
@@ -945,7 +944,7 @@ func TestStatementClose(t *testing.T) {
 		msg  string
 	}{
 		{&Stmt{stickyErr: want}, "stickyErr not propagated"},
-		{&Stmt{cg: &Tx{}, cgds: &namedArg_go.driverStmt{Locker: &sync.Mutex{}, si: stubDriverStmt{want}}}, "driverStmt.Close() error not propagated"},
+		{&Stmt{cg: &Tx{}, cgds: &driverStmt{Locker: &sync.Mutex{}, si: stubDriverStmt{want}}}, "driverStmt.Close() error not propagated"},
 	}
 	for _, test := range tests {
 		if err := test.stmt.Close(); err != want {
@@ -1728,7 +1727,7 @@ func TestQueryRowClosingStmt(t *testing.T) {
 var atomicRowsCloseHook atomic.Value // of func(*Rows, *error)
 
 func init() {
-	namedArg_go.rowsCloseHook = func() func(*Rows, *error) {
+	rowsCloseHook = func() func(*Rows, *error) {
 		fn, _ := atomicRowsCloseHook.Load().(func(*Rows, *error))
 		return fn
 	}
@@ -2144,17 +2143,17 @@ func TestMaxOpenConnsOnBusy(t *testing.T) {
 
 	ctx := context.Background()
 
-	conn0, err := db.conn(ctx, namedArg_go.cachedOrNewConn)
+	conn0, err := db.conn(ctx, cachedOrNewConn)
 	if err != nil {
 		t.Fatalf("db open conn fail: %v", err)
 	}
 
-	conn1, err := db.conn(ctx, namedArg_go.cachedOrNewConn)
+	conn1, err := db.conn(ctx, cachedOrNewConn)
 	if err != nil {
 		t.Fatalf("db open conn fail: %v", err)
 	}
 
-	conn2, err := db.conn(ctx, namedArg_go.cachedOrNewConn)
+	conn2, err := db.conn(ctx, cachedOrNewConn)
 	if err != nil {
 		t.Fatalf("db open conn fail: %v", err)
 	}
@@ -2310,8 +2309,8 @@ func TestConnMaxLifetime(t *testing.T) {
 	t0 := time.Unix(1000000, 0)
 	offset := time.Duration(0)
 
-	namedArg_go.nowFunc = func() time.Time { return t0.Add(offset) }
-	defer func() { namedArg_go.nowFunc = time.Now }()
+	nowFunc = func() time.Time { return t0.Add(offset) }
+	defer func() { nowFunc = time.Now }()
 
 	db := newTestDB(t, "magicquery")
 	defer closeDB(t, db)
@@ -2496,7 +2495,7 @@ func TestCloseConnBeforeStmts(t *testing.T) {
 	defer setHookpostCloseConn(nil)
 	setHookpostCloseConn(func(_ *fakeConn, err error) {
 		if err != nil {
-			t.Errorf("Error closing fakeConn: %v; from %s", err, namedArg_go.stack())
+			t.Errorf("Error closing fakeConn: %v; from %s", err, stack())
 			db.dumpDeps(t)
 			t.Errorf("ConnPool = %#v", db)
 		}
@@ -2614,7 +2613,7 @@ func TestManyErrBadConn(t *testing.T) {
 			f(db)
 		}
 
-		nconn := namedArg_go.maxBadConnRetries + 1
+		nconn := maxBadConnRetries + 1
 		db.SetMaxIdleConns(nconn)
 		db.SetMaxOpenConns(nconn)
 		// open enough connections
@@ -2787,18 +2786,18 @@ func TestTxCannotCommitAfterRollback(t *testing.T) {
 	sendQuery := make(chan struct{})
 	// The Tx status is returned through the row results, ensure
 	// that the rows results are not cancelled.
-	namedArg_go.bypassRowsAwaitDone = true
-	namedArg_go.hookTxGrabConn = func() {
+	bypassRowsAwaitDone = true
+	hookTxGrabConn = func() {
 		cancel()
 		<-sendQuery
 	}
-	namedArg_go.rollbackHook = func() {
+	rollbackHook = func() {
 		close(sendQuery)
 	}
 	defer func() {
-		namedArg_go.hookTxGrabConn = nil
-		namedArg_go.rollbackHook = nil
-		namedArg_go.bypassRowsAwaitDone = false
+		hookTxGrabConn = nil
+		rollbackHook = nil
+		bypassRowsAwaitDone = false
 	}()
 
 	err = tx.QueryRow("SELECT|tx_status|tx_status|").Scan(&txStatus)
@@ -2856,12 +2855,12 @@ func TestConnExpiresFreshOutOfPool(t *testing.T) {
 	offset := time.Duration(0)
 	offsetMu := sync.RWMutex{}
 
-	namedArg_go.nowFunc = func() time.Time {
+	nowFunc = func() time.Time {
 		offsetMu.RLock()
 		defer offsetMu.RUnlock()
 		return t0.Add(offset)
 	}
-	defer func() { namedArg_go.nowFunc = time.Now }()
+	defer func() { nowFunc = time.Now }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -2880,7 +2879,7 @@ func TestConnExpiresFreshOutOfPool(t *testing.T) {
 			db.SetMaxIdleConns(1)
 			db.SetConnMaxLifetime(10 * time.Second)
 
-			conn, err := db.conn(ctx, namedArg_go.alwaysNewConn)
+			conn, err := db.conn(ctx, alwaysNewConn)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2891,7 +2890,7 @@ func TestConnExpiresFreshOutOfPool(t *testing.T) {
 			go func() {
 				defer close(afterPutConn)
 
-				conn, err := db.conn(ctx, namedArg_go.alwaysNewConn)
+				conn, err := db.conn(ctx, alwaysNewConn)
 				if err == nil {
 					db.putConn(conn, err, false)
 				} else {
@@ -3685,7 +3684,7 @@ func TestIssue18719(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	namedArg_go.hookTxGrabConn = func() {
+	hookTxGrabConn = func() {
 		cancel()
 
 		// Wait for the context to cancel and tx to rollback.
@@ -3693,7 +3692,7 @@ func TestIssue18719(t *testing.T) {
 			time.Sleep(3 * time.Millisecond)
 		}
 	}
-	defer func() { namedArg_go.hookTxGrabConn = nil }()
+	defer func() { hookTxGrabConn = nil }()
 
 	// This call will grab the connection and cancel the context
 	// after it has done so. Code after must deal with the canceled state.
@@ -3773,7 +3772,7 @@ func TestConnectionLeak(t *testing.T) {
 	db := newTestDB(t, "people")
 	defer closeDB(t, db)
 	// Start by opening defaultMaxIdleConns
-	rows := make([]*Rows, namedArg_go.defaultMaxIdleConns)
+	rows := make([]*Rows, defaultMaxIdleConns)
 	// We need to SetMaxOpenConns > MaxIdleConns, so the ConnPool can open
 	// a new connection and we can fill the idle queue with the released
 	// connections.
@@ -3884,10 +3883,10 @@ func TestMaxIdleTime(t *testing.T) {
 	}
 	baseTime := time.Unix(0, 0)
 	defer func() {
-		namedArg_go.nowFunc = time.Now
+		nowFunc = time.Now
 	}()
 	for _, item := range list {
-		namedArg_go.nowFunc = func() time.Time {
+		nowFunc = func() time.Time {
 			return baseTime
 		}
 		t.Run(fmt.Sprintf("%v", item.wantMaxIdleTime), func(t *testing.T) {
@@ -3905,7 +3904,7 @@ func TestMaxIdleTime(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			namedArg_go.nowFunc = func() time.Time {
+			nowFunc = func() time.Time {
 				return baseTime.Add(item.timeOffset)
 			}
 

@@ -6,11 +6,10 @@ package sql
 
 import (
 	"context"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"io"
-	"memsql-conn-pool/driver"
-	"memsql-conn-pool/sql/namedArg.go"
 	"reflect"
 	"sort"
 	"strconv"
@@ -207,7 +206,7 @@ type Dummy struct {
 }
 
 func TestDrivers(t *testing.T) {
-	namedArg_go.unregisterAllDrivers()
+	unregisterAllDrivers()
 	Register("test", fdriver)
 	Register("invalid", Dummy{})
 	all := Drivers()

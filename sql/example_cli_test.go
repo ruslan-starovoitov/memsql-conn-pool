@@ -6,6 +6,7 @@ package sql_test
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"log"
 	"os"
@@ -13,7 +14,7 @@ import (
 	"time"
 )
 
-var pool *ConnPool // Database connection pool.
+var pool *sql.DB // Database connection pool.
 
 func Example_openDBCLI() {
 	id := flag.Int64("id", 0, "person ID to find")
@@ -29,7 +30,7 @@ func Example_openDBCLI() {
 	var err error
 
 	// Opening a driver typically will not attempt to connect to the database.
-	pool, err = Open("driver-name", *dsn)
+	pool, err = sql.Open("driver-name", *dsn)
 	if err != nil {
 		// This will not be a connection error, but a DSN parse error or
 		// another initialization error.
@@ -77,7 +78,7 @@ func Query(ctx context.Context, id int64) {
 	defer cancel()
 
 	var name string
-	err := pool.QueryRowContext(ctx, "select p.name from people as p where p.id = :id;", Named("id", id)).Scan(&name)
+	err := pool.QueryRowContext(ctx, "select p.name from people as p where p.id = :id;", sql.Named("id", id)).Scan(&name)
 	if err != nil {
 		log.Fatal("unable to execute search query", err)
 	}

@@ -6,6 +6,7 @@ package sql_test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"strings"
@@ -14,7 +15,7 @@ import (
 
 var (
 	ctx context.Context
-	db  *ConnPool
+	db  *sql.DB
 )
 
 func ExampleDB_QueryContext() {
@@ -56,7 +57,7 @@ func ExampleDB_QueryRowContext() {
 	var created time.Time
 	err := db.QueryRowContext(ctx, "SELECT username, created_at FROM users WHERE id=?", id).Scan(&username, &created)
 	switch {
-	case err == ErrNoRows:
+	case err == sql.ErrNoRows:
 		log.Printf("no user with id %d\n", id)
 	case err != nil:
 		log.Fatalf("query error: %v\n", err)
@@ -220,7 +221,7 @@ func ExampleTx_Prepare() {
 }
 
 func ExampleDB_BeginTx() {
-	tx, err := db.BeginTx(ctx, &TxOptions{Isolation: LevelSerializable})
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -258,7 +259,7 @@ func ExampleConn_ExecContext() {
 }
 
 func ExampleTx_ExecContext() {
-	tx, err := db.BeginTx(ctx, &TxOptions{Isolation: LevelSerializable})
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -276,7 +277,7 @@ func ExampleTx_ExecContext() {
 }
 
 func ExampleTx_Rollback() {
-	tx, err := db.BeginTx(ctx, &TxOptions{Isolation: LevelSerializable})
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -313,7 +314,7 @@ func ExampleStmt() {
 	var username string
 	err = stmt.QueryRowContext(ctx, id).Scan(&username)
 	switch {
-	case err == ErrNoRows:
+	case err == sql.ErrNoRows:
 		log.Fatalf("no user with id %d", id)
 	case err != nil:
 		log.Fatal(err)
@@ -335,7 +336,7 @@ func ExampleStmt_QueryRowContext() {
 	var username string
 	err = stmt.QueryRowContext(ctx, id).Scan(&username)
 	switch {
-	case err == ErrNoRows:
+	case err == sql.ErrNoRows:
 		log.Fatalf("no user with id %d", id)
 	case err != nil:
 		log.Fatal(err)

@@ -699,6 +699,8 @@ func OpenDB(c driver.Connector) *ConnPool {
 	return connPool
 }
 
+
+//TODO это нужно закрыть
 // Open opens a database specified by its database driver name and a
 // driver-specific data source name, usually consisting of at least a
 // database name and connection information.

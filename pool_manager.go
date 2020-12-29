@@ -2,6 +2,7 @@ package memsql_conn_pool
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -9,6 +10,7 @@ import (
 	cmap "github.com/orcaman/concurrent-map"
 )
 
+var errPoolManagerClosed = errors.New("pools manager closed")
 //PoolManager содержит хеш-таблицу пулов соединений. Он содержит
 //общие ограничения на количество соединений
 type PoolManager struct {
@@ -31,8 +33,8 @@ type PoolManager struct {
 	openerChannel chan *ConnPool
 }
 
-//NewPool создаёт новый пул соединений
-func NewPool(connectionLimit int, idleTimeout time.Duration) *PoolManager {
+//NewPoolManager создаёт новый пул соединений
+func NewPoolManager(connectionLimit int, idleTimeout time.Duration) *PoolManager {
 	log.Print("NewPool creation")
 	poolManager := PoolManager{
 		pools:       cmap.New(),
@@ -81,12 +83,35 @@ func (poolManager *PoolManager) Query(credentials Credentials, sql string) (*Row
 	return rows, nil
 }
 
+
+// QueryRow executes a query that is expected to return at most one row.
+// QueryRowContext always returns a non-nil value. Errors are deferred until
+// Row's Scan method is called.
+// If the query selects no rows, the *Row's Scan will return ErrNoRows.
+// Otherwise, the *Row's Scan scans the first selected row and discards
+// the rest.
+func (poolManager *PoolManager) QueryRow(credentials Credentials, sql string) (*Row, error) {
+	connPool, err := poolManager.getOrCreateConnPool(credentials)
+	if err != nil {
+		return nil, err
+	}
+
+	row := connPool.QueryRowContext(poolManager.ctx, sql)
+	return row, nil
+}
+
+
+//TODO нужно реализовать добавить ошибку
 //ClosePool закрывает все текущие соединения и блокирует открытие новых соединений
-func (poolManager *PoolManager) ClosePool() {
+func (poolManager *PoolManager) Close() {
+	poolManager.closed = true
 	poolManager.cancel()
 }
 
 func (poolManager *PoolManager) getOrCreateConnPool(credentials Credentials) (*ConnPool, error) {
+	if poolManager.closed{
+		return nil, errPoolManagerClosed
+	}
 	//Create pool if not exists
 	if !poolManager.pools.Has(credentials.GetId()) {
 		dsn := GetDataSourceName(credentials)

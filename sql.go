@@ -1247,6 +1247,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 
 	connPool.numOpen++ // optimistically
 	connPool.mu.Unlock()
+	//Создание нового соединения
 	ci, err := connPool.connector.Connect(ctx)
 	if err != nil {
 		connPool.mu.Lock()

@@ -10,10 +10,9 @@ import (
 	cmap "github.com/orcaman/concurrent-map"
 )
 
-var errPoolManagerClosed = errors.New("pools manager closed")
-//PoolManager содержит хеш-таблицу пулов соединений. Он содержит
+//PoolFacade содержит хеш-таблицу пулов соединений. Он содержит
 //общие ограничения на количество соединений
-type PoolManager struct {
+type PoolFacade struct {
 	pools cmap.ConcurrentMap
 	ctx   context.Context
 
@@ -33,10 +32,12 @@ type PoolManager struct {
 	openerChannel chan *ConnPool
 }
 
-//NewPoolManager создаёт новый пул соединений
-func NewPoolManager(connectionLimit int, idleTimeout time.Duration) *PoolManager {
-	log.Print("NewPool creation")
-	poolManager := PoolManager{
+//NewPoolFacade создаёт новый пул соединений
+func NewPoolFacade(connectionLimit int, idleTimeout time.Duration) *PoolFacade {
+	if connectionLimit <= 0{
+		panic("it doesn't make sense to create a pool with such connection limit ")
+	}
+	poolManager := PoolFacade{
 		pools:       cmap.New(),
 		totalMax:    connectionLimit,
 		idleTimeout: idleTimeout,
@@ -53,7 +54,7 @@ func NewPoolManager(connectionLimit int, idleTimeout time.Duration) *PoolManager
 
 // Exec executes a query without returning any rows.
 // The args are for any placeholder parameters in the query.
-func (poolManager *PoolManager) Exec(credentials Credentials, sql string) (Result, error) {
+func (poolManager *PoolFacade) Exec(credentials Credentials, sql string) (Result, error) {
 	connPool, err := poolManager.getOrCreateConnPool(credentials)
 	if err != nil {
 		return nil, err
@@ -77,7 +78,7 @@ func (poolManager *PoolManager) Exec(credentials Credentials, sql string) (Resul
 // The provided TxOptions is optional and may be nil if defaults should be used.
 // If a non-default isolation level is used that the driver doesn't support,
 // an error will be returned.
-func (poolManager *PoolManager) BeginTx(credentials Credentials) (*Tx, error) {
+func (poolManager *PoolFacade) BeginTx(credentials Credentials) (*Tx, error) {
 	connPool, err := poolManager.getOrCreateConnPool(credentials)
 	if err != nil {
 		return nil, err
@@ -93,7 +94,7 @@ func (poolManager *PoolManager) BeginTx(credentials Credentials) (*Tx, error) {
 
 // Query executes a query that returns rows, typically a SELECT.
 // The args are for any placeholder parameters in the query.
-func (poolManager *PoolManager) Query(credentials Credentials, sql string) (*Rows, error) {
+func (poolManager *PoolFacade) Query(credentials Credentials, sql string) (*Rows, error) {
 	connPool, err := poolManager.getOrCreateConnPool(credentials)
 	if err != nil {
 		return nil, err
@@ -114,7 +115,7 @@ func (poolManager *PoolManager) Query(credentials Credentials, sql string) (*Row
 // If the query selects no rows, the *Row's Scan will return ErrNoRows.
 // Otherwise, the *Row's Scan scans the first selected row and discards
 // the rest.
-func (poolManager *PoolManager) QueryRow(credentials Credentials, sql string) (*Row, error) {
+func (poolManager *PoolFacade) QueryRow(credentials Credentials, sql string) (*Row, error) {
 	connPool, err := poolManager.getOrCreateConnPool(credentials)
 	if err != nil {
 		return nil, err
@@ -127,12 +128,15 @@ func (poolManager *PoolManager) QueryRow(credentials Credentials, sql string) (*
 
 //TODO нужно реализовать добавить ошибку
 //ClosePool закрывает все текущие соединения и блокирует открытие новых соединений
-func (poolManager *PoolManager) Close() {
+func (poolManager *PoolFacade) Close() {
 	poolManager.closed = true
 	poolManager.cancel()
 }
 
-func (poolManager *PoolManager) getOrCreateConnPool(credentials Credentials) (*ConnPool, error) {
+
+var errPoolManagerClosed = errors.New("pools manager closed")
+//getOrCreateConnPool создаёт новый пустой пул для нового data source name если его нет
+func (poolManager *PoolFacade) getOrCreateConnPool(credentials Credentials) (*ConnPool, error) {
 	if poolManager.closed{
 		return nil, errPoolManagerClosed
 	}
@@ -158,6 +162,7 @@ func (poolManager *PoolManager) getOrCreateConnPool(credentials Credentials) (*C
 	return nil, unableToGetPool
 }
 
-func (poolManager *PoolManager) isOpenConnectionLimitExceeded() bool {
-	return poolManager.totalMax <= poolManager.numIdle+poolManager.numOpen
+//TODO возможно нужен мьютекс
+func (poolManager *PoolFacade) isOpenConnectionLimitExceeded() bool {
+	return poolManager.totalMax <= poolManager.numOpen
 }

@@ -2,12 +2,11 @@ package memsql_conn_pool
 
 import (
 	"context"
-	"strconv"
 )
 
 //TODO создаёт новое соединение в контексте без проверок ограничений
 // копия connectionOpener
-func (poolManager *PoolManager) globalConnectionOpener(ctx context.Context) {
+func (poolManager *PoolFacade) globalConnectionOpener(ctx context.Context) {
 	//ждём пока контекст закроется или попросят открыть новое соединение
 	for {
 		select {
@@ -58,7 +57,7 @@ func (connPool *ConnPool) openNewConnection(ctx context.Context) {
 
 // nextRequestKeyLocked returns the next connection request key.
 // It is assumed that nextRequest will not overflow.
-func (poolManager *PoolManager) nextRequestKeyLocked() uint64 {
+func (poolManager *PoolFacade) nextRequestKeyLocked() uint64 {
 	next := poolManager.nextRequest
 	poolManager.nextRequest++
 	return next
@@ -69,7 +68,7 @@ func (poolManager *PoolManager) nextRequestKeyLocked() uint64 {
 // Assumes poolManager.mu is locked.
 // If there are connRequests and the connection limit hasn't been reached,
 // then tell the connectionOpener to open new connections.
-func (poolManager *PoolManager) maybeOpenNewConnectionsLocked() {
+func (poolManager *PoolFacade) maybeOpenNewConnectionsLocked() {
 	poolManager.mu.Lock()
 	numRequests := len(poolManager.connRequests)
 	

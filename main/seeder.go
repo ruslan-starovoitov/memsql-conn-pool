@@ -8,7 +8,7 @@ import (
 type seeder struct {
 }
 
-func (seeder) Seed(credentials cpool.Credentials, manager *cpool.PoolManager, group *sync.WaitGroup) {
+func (seeder) Seed(credentials cpool.Credentials, manager *cpool.PoolFacade, group *sync.WaitGroup) {
 	for i := 0; i < 10; i++ {
 		_, err := manager.Exec(credentials, "insert into test (message)values(\"my message\")")
 		if err != nil {

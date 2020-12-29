@@ -1,7 +1,7 @@
 package memsql_conn_pool
 
 //Stats TODO возвращает статистику текущего пула
-func (poolManager * PoolManager) Stats() PoolManagerStats {
+func (poolManager * PoolFacade) Stats() PoolManagerStats {
 	poolManager.mu.Lock()
 	
 	result:=PoolManagerStats{

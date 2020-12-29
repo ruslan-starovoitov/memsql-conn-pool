@@ -48,7 +48,7 @@ func main() {
 		},
 	}
 
-	connPool := cpool.NewPoolManager(100, time.Minute)
+	connPool := cpool.NewPoolFacade(100, time.Minute)
 	
 	reader := reader{}
 	wg := sync.WaitGroup{}

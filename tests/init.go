@@ -20,7 +20,7 @@ const (
 )
 
 func init() {
-	pm := cpool.NewPoolManager(1, time.Second)
+	pm := cpool.NewPoolFacade(1, time.Second)
 
 	sql := `
 	CREATE DATABASE IF NOT EXISTS hellomemsql;

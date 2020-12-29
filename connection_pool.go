@@ -19,7 +19,7 @@ import (
 // connection is returned to ConnPool's idle connection pool. The pool size
 // can be controlled with SetMaxIdleConns.
 type ConnPool struct {
-	poolManager *PoolManager
+	poolManager *PoolFacade
 
 	// Atomic access only. At top of struct to prevent mis-alignment
 	// on 32-bit platforms. Of type time.Duration.

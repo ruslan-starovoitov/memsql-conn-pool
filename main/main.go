@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	cpool "memsql-conn-pool"
 	_ "memsql-conn-pool/mysql"
 	"sync"
@@ -8,7 +9,7 @@ import (
 )
 
 func main() {
-	println("start")
+	log.Print("start")
 	var credentials = []cpool.Credentials{
 		{
 			Username: "root",
@@ -48,19 +49,26 @@ func main() {
 	}
 
 	connPool := cpool.NewPool(100, time.Minute)
-	seeder := seeder{}
+	
 	reader := reader{}
 	wg := sync.WaitGroup{}
 
-	for _, cr := range credentials {
-		seeder.Seed(cr, connPool)
-	}
+	// seeder := seeder{}
+	// log.Print("start writing")
+	// for _, cr := range credentials {
+	// 	wg.Add(1)
+	// 	seeder.Seed(cr, connPool,  &wg)
+	// }
 
+	// wg.Wait()
+	
+	log.Print("start reading")
 	for _, cr := range credentials {
 		wg.Add(1)
 		go reader.Read(cr, connPool, &wg)
 	}
 
+	log.Print("wait")
 	wg.Wait()
-	println("the end")
+	log.Print("the end")
 }

@@ -2,9 +2,11 @@ package memsql_conn_pool
 
 import (
 	"context"
-	cmap "github.com/orcaman/concurrent-map"
+	"log"
 	"sync"
 	"time"
+
+	cmap "github.com/orcaman/concurrent-map"
 )
 
 //PoolManager содержит хеш-таблицу пулов соединений. Он содержит
@@ -24,14 +26,14 @@ type PoolManager struct {
 	closed bool
 
 	mu sync.Mutex // protects following fields
-	//для запросов на создание новых соединений
-	connRequests  map[uint64]connRequest
+	connRequests  map[uint64]connRequest//для запросов на создание новых соединений
 	nextRequest   uint64 // Next key to use in connRequests.
 	openerChannel chan *ConnPool
 }
 
 //NewPool создаёт новый пул соединений
 func NewPool(connectionLimit int, idleTimeout time.Duration) *PoolManager {
+	log.Print("NewPool creation")
 	poolManager := PoolManager{
 		pools:       cmap.New(),
 		totalMax:    connectionLimit,
@@ -45,21 +47,6 @@ func NewPool(connectionLimit int, idleTimeout time.Duration) *PoolManager {
 	go poolManager.globalConnectionOpener(ctx)
 	return &poolManager
 }
-
-//TODO создаёт новое соединение в контексте без проверок ограничений
-// копия connectionOpener
-func (poolManager *PoolManager) globalConnectionOpener(ctx context.Context) {
-	//ждём пока контекст закроется или попросят открыть новое соединение
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case connPool := <-poolManager.openerChannel:
-			connPool.openNewConnection(ctx)
-		}
-	}
-}
-
 
 
 // Exec executes a query without returning any rows.
@@ -108,11 +95,15 @@ func (poolManager *PoolManager) getOrCreateConnPool(credentials Credentials) (*C
 		if err != nil {
 			return nil, err
 		}
+		//TODO некрасиво
+		connPool.poolManager = poolManager
 		poolManager.pools.Set(credentials.GetId(), connPool)
+		log.Print("Connection pool have just created")
 		return connPool, nil
 	}
 	//Return pool if exists
 	if tmp, ok := poolManager.pools.Get(credentials.GetId()); ok {
+		log.Print("Connection pool already exists")
 		return tmp.(*ConnPool), nil
 	}
 	return nil, unableToGetPool
@@ -120,42 +111,4 @@ func (poolManager *PoolManager) getOrCreateConnPool(credentials Credentials) (*C
 
 func (poolManager *PoolManager) isOpenConnectionLimitExceeded() bool {
 	return poolManager.totalMax <= poolManager.numIdle+poolManager.numOpen
-}
-
-// nextRequestKeyLocked returns the next connection request key.
-// It is assumed that nextRequest will not overflow.
-func (poolManager *PoolManager) nextRequestKeyLocked() uint64 {
-	next := poolManager.nextRequest
-	poolManager.nextRequest++
-	return next
-}
-
-// Assumes poolManager.mu is locked.
-// If there are connRequests and the connection limit hasn't been reached,
-// then tell the connectionOpener to open new connections.
-func (poolManager *PoolManager) maybeOpenNewConnectionsLocked() {
-	poolManager.mu.Lock()
-	numRequests := len(poolManager.connRequests)
-	if poolManager.totalMax > 0 {
-		numCanOpen := poolManager.totalMax - poolManager.numOpen
-		if numCanOpen < numRequests {
-			numRequests = numCanOpen
-		}
-	}
-
-	for _, value := range poolManager.connRequests {
-		poolManager.numOpen++ // optimistically
-		if poolManager.closed {
-			return
-		}
-		//Дать команду создать соединение для конкретного пула
-		poolManager.openerChannel <- value.connPool
-
-		numRequests--
-		if numRequests == 0 {
-			break
-		}
-	}
-
-	poolManager.mu.Unlock()
 }

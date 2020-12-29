@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	cpool "memsql-conn-pool"
 	"sync"
 )
@@ -21,8 +21,7 @@ func (reader) Read(credentials cpool.Credentials, connPool *cpool.PoolManager, g
 		if err = rows.Scan(&num); err != nil {
 			panic(err)
 		}
-		fmt.Println("Number of rows is: " + num)
-		fmt.Println()
+		log.Print("Number of rows is: " + num)
 	}
 	group.Done()
 }

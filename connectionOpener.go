@@ -2,22 +2,18 @@ package memsql_conn_pool
 
 import (
 	"context"
-	"log"
 	"strconv"
 )
 
 //TODO создаёт новое соединение в контексте без проверок ограничений
 // копия connectionOpener
 func (poolManager *PoolManager) globalConnectionOpener(ctx context.Context) {
-	log.Print("globalConnectionOpener start")
 	//ждём пока контекст закроется или попросят открыть новое соединение
 	for {
 		select {
 		case <-ctx.Done():
-			log.Print("globalConnectionOpener Pool manager expired")
 			return
 		case connPool := <-poolManager.openerChannel:
-			log.Print("globalConnectionOpener request for new connection")
 			connPool.openNewConnection(ctx)
 		}
 	}
@@ -74,16 +70,13 @@ func (poolManager *PoolManager) nextRequestKeyLocked() uint64 {
 // If there are connRequests and the connection limit hasn't been reached,
 // then tell the connectionOpener to open new connections.
 func (poolManager *PoolManager) maybeOpenNewConnectionsLocked() {
-	log.Print("maybeOpenNewConnectionsLocked")
 	poolManager.mu.Lock()
 	numRequests := len(poolManager.connRequests)
-	log.Print("Кол-во запросов на открытие нового канала : "+strconv.Itoa(numRequests))
-
+	
 	if poolManager.totalMax > 0 {
 		numCanOpen := poolManager.totalMax - poolManager.numOpen
 		if numCanOpen < numRequests {
 			numRequests = numCanOpen
-			log.Print("Из-за ограничения кол-во открытых каналов будет меньше, а именно : "+strconv.Itoa(numRequests))
 		}
 	}
 	
@@ -93,7 +86,6 @@ func (poolManager *PoolManager) maybeOpenNewConnectionsLocked() {
 			return
 		}
 
-		log.Print("maybeOpenNewConnectionsLocked команда открыть новый пул")
 		//Дать команду создать соединение для конкретного пула
 		poolManager.openerChannel <- value.connPool
 

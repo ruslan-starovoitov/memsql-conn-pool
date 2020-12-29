@@ -7,6 +7,7 @@ test:
 
 
 delete-container:
-	docker image rm memsql/cluster-in-a-box
+	docker-compose down
+	docker image rm -f memsql/cluster-in-a-box
 
 

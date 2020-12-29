@@ -67,6 +67,30 @@ func (poolManager *PoolManager) Exec(credentials Credentials, sql string) (Resul
 	return result, nil
 }
 
+// BeginTx starts a transaction.
+//
+// The provided context is used until the transaction is committed or rolled back.
+// If the context is canceled, the sql package will roll back
+// the transaction. Tx.Commit will return an error if the context provided to
+// BeginTx is canceled.
+//
+// The provided TxOptions is optional and may be nil if defaults should be used.
+// If a non-default isolation level is used that the driver doesn't support,
+// an error will be returned.
+func (poolManager *PoolManager) BeginTx(credentials Credentials) (*Tx, error) {
+	connPool, err := poolManager.getOrCreateConnPool(credentials)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := connPool.BeginTx(context.Background(),  nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return tx, nil
+}
+
 // Query executes a query that returns rows, typically a SELECT.
 // The args are for any placeholder parameters in the query.
 func (poolManager *PoolManager) Query(credentials Credentials, sql string) (*Rows, error) {

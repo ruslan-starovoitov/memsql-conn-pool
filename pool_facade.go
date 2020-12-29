@@ -146,6 +146,7 @@ func (poolFacade *PoolFacade) getOrCreateConnPool(credentials Credentials) (*Con
 		}
 		//TODO некрасиво
 		connPool.poolFacade = poolFacade
+		connPool.SetConnMaxIdleTime(poolFacade.idleTimeout)
 		poolFacade.pools.Set(credentials.GetId(), connPool)
 		return connPool, nil
 	}

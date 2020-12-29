@@ -10,11 +10,11 @@ package mysql
 
 type mysqlResult struct {
 	affectedRows int64
-	insertId     int64
+	insertID     int64
 }
 
 func (res *mysqlResult) LastInsertId() (int64, error) {
-	return res.insertId, nil
+	return res.insertID, nil
 }
 
 func (res *mysqlResult) RowsAffected() (int64, error) {

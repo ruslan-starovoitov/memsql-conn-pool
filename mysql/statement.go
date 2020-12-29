@@ -89,7 +89,7 @@ func (stmt *mysqlStmt) Exec(args []driver.Value) (driver.Result, error) {
 
 	return &mysqlResult{
 		affectedRows: int64(mc.affectedRows),
-		insertId:     int64(mc.insertId),
+		insertID:     int64(mc.insertId),
 	}, nil
 }
 
@@ -171,9 +171,8 @@ func (c converter) ConvertValue(v interface{}) (driver.Value, error) {
 		// indirect pointers
 		if rv.IsNil() {
 			return nil, nil
-		} else {
-			return c.ConvertValue(rv.Elem().Interface())
 		}
+		return c.ConvertValue(rv.Elem().Interface())
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return rv.Int(), nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:

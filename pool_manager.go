@@ -2,18 +2,10 @@ package memsql_conn_pool
 
 import (
 	"context"
-	"github.com/orcaman/concurrent-map"
+	cmap "github.com/orcaman/concurrent-map"
 	"sync"
 	"time"
 )
-
-//connRequest добавляется в connRequests когда ConnPool не может использовать закешированные соединения
-type connRequest struct {
-	//Ссылка на пул, который сделал запрос
-	connPool *ConnPool
-	//Канал, который пул слушает
-	responce chan connCreationResponse
-}
 
 //PoolManager содержит хеш-таблицу пулов соединений. Он содержит
 //общие ограничения на количество соединений
@@ -38,6 +30,7 @@ type PoolManager struct {
 	openerChannel chan *ConnPool
 }
 
+//NewPool создаёт новый пул соединений
 func NewPool(connectionLimit int, idleTimeout time.Duration) *PoolManager {
 	poolManager := PoolManager{
 		pools:       cmap.New(),
@@ -67,6 +60,10 @@ func (poolManager *PoolManager) globalConnectionOpener(ctx context.Context) {
 	}
 }
 
+
+
+// Exec executes a query without returning any rows.
+// The args are for any placeholder parameters in the query.
 func (poolManager *PoolManager) Exec(credentials Credentials, sql string) (Result, error) {
 	connPool, err := poolManager.getOrCreateConnPool(credentials)
 	if err != nil {
@@ -81,6 +78,8 @@ func (poolManager *PoolManager) Exec(credentials Credentials, sql string) (Resul
 	return result, nil
 }
 
+// Query executes a query that returns rows, typically a SELECT.
+// The args are for any placeholder parameters in the query.
 func (poolManager *PoolManager) Query(credentials Credentials, sql string) (*Rows, error) {
 	connPool, err := poolManager.getOrCreateConnPool(credentials)
 	if err != nil {
@@ -95,6 +94,7 @@ func (poolManager *PoolManager) Query(credentials Credentials, sql string) (*Row
 	return rows, nil
 }
 
+//ClosePool закрывает все текущие соединения и блокирует открытие новых соединений
 func (poolManager *PoolManager) ClosePool() {
 	poolManager.cancel()
 }

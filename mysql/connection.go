@@ -317,7 +317,7 @@ func (mc *mysqlConn) Exec(query string, args []driver.Value) (driver.Result, err
 	if err == nil {
 		return &mysqlResult{
 			affectedRows: int64(mc.affectedRows),
-			insertId:     int64(mc.insertId),
+			insertID:     int64(mc.insertId),
 		}, err
 	}
 	return nil, mc.markBadConn(err)

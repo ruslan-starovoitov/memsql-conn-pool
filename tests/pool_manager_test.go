@@ -58,8 +58,10 @@ var credentials = []cpool.Credentials{
 	user6Db2Credentials,
 }
 
-var concurrenyLevel = 10
-var idleTimeout = time.Minute
+const (
+	concurrenyLevel = 10
+	idleTimeout = time.Minute
+)
 
 func TestCrateDBConnect(t *testing.T) {
 	t.Parallel()
@@ -68,37 +70,47 @@ func TestCrateDBConnect(t *testing.T) {
 	defer pm.Close()
 
 	var result int
-	row, err := pm.QueryRow(user1Db1Credentials, "select 1 +1")
+	row, err := pm.QueryRow(user1Db1Credentials, "select 1+1")
 	err = row.Scan(&result)
 	assert.NoError(t, err, "QueryRow Scan unexpectedly failed")
 	assert.Equal(t, 2, result, "bad result")
 }
 
-func TestConnect(t *testing.T) {
+func TestConnectToDesiredDatabase(t *testing.T) {
+	t.Parallel()
+
+	//Open pool
+	pm := cpool.NewPoolFacade(concurrenyLevel, idleTimeout)
+	defer pm.Close()
+
+	for _, cr := range credentials{
+		//Check database name
+		row, err := pm.QueryRow(cr, "SELECT DATABASE();")
+		assert.NoError(t, err, "connection error")
+		var currentDB string
+		err = row.Scan(&currentDB)
+		assert.NoError(t, err, "QueryRow Scan unexpectedly failed")
+		assert.Equal(t, cr.Database, currentDB, "Did not connect to specified database ")
+
+		//Check user name
+		row, err = pm.QueryRow(cr, "select current_user")
+		assert.NoError(t, err, "connection error")
+		var user string
+		err = row.Scan(&user)
+		assert.NoError(t, err, "QueryRow Scan unexpectedly failed")
+		assert.Equal(t, cr.Username+"@%", user, "Did not connect as specified user")
+	}	
+}
+
+func TestPoolClosing(t *testing.T) {
 	t.Parallel()
 
 	//Open pool
 	pm := cpool.NewPoolFacade(concurrenyLevel, idleTimeout)
 
-	//Check database name
-	var currentDB string
-	row, err := pm.QueryRow(user1Db1Credentials, "SELECT DATABASE();")
-	assert.NoError(t, err, "connection error")
-	err = row.Scan(&currentDB)
-	assert.NoError(t, err, "QueryRow Scan unexpectedly failed")
-	assert.Equal(t, user1Db1Credentials.Database, currentDB, "Did not connect to specified database ")
-
-	//Check user name
-	var user string
-	row, err = pm.QueryRow(user1Db1Credentials, "select current_user")
-	assert.NoError(t, err, "connection error")
-	err = row.Scan(&user)
-	assert.NoError(t, err, "QueryRow Scan unexpectedly failed")
-	assert.Equal(t, user1Db1Credentials.Username+"@%", user, "Did not connect as specified user")
-
 	//Check pool closing
 	pm.Close()
-	row, err = pm.QueryRow(user1Db1Credentials, "select 1 +1")
+	_, err := pm.QueryRow(user1Db1Credentials, "select 1+1")
 	assert.Error(t, err, "Unable to close connection")
 }
 
@@ -106,6 +118,7 @@ func TestExecFailure(t *testing.T) {
 	t.Parallel()
 
 	pm := cpool.NewPoolFacade(concurrenyLevel, idleTimeout)
+	defer pm.Close()
 
 	_, err := pm.Exec(user1Db1Credentials, "incorrect sql statement;")
 	assert.Error(t, err, "connection error")
@@ -125,47 +138,18 @@ func TestExecFailureCloseBefore(t *testing.T) {
 	require.Error(t, err)
 }
 
-//the pool will release idle connection if limit
-func TestPoolManagerWillReleaseIdleConnectionIfLimitExceeded(t *testing.T) {
-	t.Parallel()
-
-	//create pool
-	pm := cpool.NewPoolFacade(2, idleTimeout)
-	var wg sync.WaitGroup
-
-	//two parallel requests
-	wg.Add(2)
-	go ExecSleep(2, user1Db1Credentials, &wg, pm)
-	go ExecSleep(2, user1Db1Credentials, &wg, pm)
-
-	//wait
-	wg.Wait()
-
-	//check open conenctions
-	stats := pm.Stats()
-	assert.Equal(t, 2, stats.NumIdle)
-
-	//request to another data source
-	wg.Add(1)
-	go ExecSleep(2, user1Db1Credentials, &wg, pm)
-
-	if waitTimeout(&wg, time.Second*5) {
-		assert.Fail(t, "Too long query execution. Probapbly pool doesn't support idle connections closing")
-	}
-}
-
-//the pool will release idle connection if limit
 func TestNumberOfIdleConnectionsOneUser(t *testing.T) {
 	t.Parallel()
 
 	//create pool
 	conenctionLimit := 5
 	pm := cpool.NewPoolFacade(conenctionLimit, idleTimeout)
+	defer pm.Close()
 	var wg sync.WaitGroup
 
 	//parallel requests
 	for i := 0; i < conenctionLimit; i++ {
-		go ExecSleep(2, user1Db1Credentials, &wg, pm)
+		go execSleep(2, user1Db1Credentials, &wg, pm)
 		wg.Add(1)
 	}
 
@@ -184,11 +168,12 @@ func TestNumberOfIdleConnectionsMultipleUsers(t *testing.T) {
 	//create pool
 	conenctionLimit := 5
 	pm := cpool.NewPoolFacade(conenctionLimit, idleTimeout)
+	defer pm.Close()
 	var wg sync.WaitGroup
 
 	//parallel requests
 	for i := 0; i < conenctionLimit; i++ {
-		go ExecSleep(2, credentials[i], &wg, pm)
+		go execSleep(2, credentials[i], &wg, pm)
 		wg.Add(1)
 	}
 
@@ -200,8 +185,7 @@ func TestNumberOfIdleConnectionsMultipleUsers(t *testing.T) {
 	assert.Equal(t, conenctionLimit, stats.NumIdle)
 }
 
-//the pool will release idle connection if limit
-func TestConnectionsLimit(t *testing.T) {
+func TestReleaseIdleConnectionIfLimitExeeded(t *testing.T) {
 	t.Parallel()
 
 	//create pool
@@ -209,11 +193,12 @@ func TestConnectionsLimit(t *testing.T) {
 	oneExecDurationSec := 2
 	expectedTotalDurationSec := 2 * oneExecDurationSec
 	pm := cpool.NewPoolFacade(conenctionLimit, idleTimeout)
+	defer pm.Close()
 	var wg sync.WaitGroup
 
 	//parallel requests
 	for i := 0; i < conenctionLimit+1; i++ {
-		go ExecSleep(oneExecDurationSec, user4Db2Credentials, &wg, pm)
+		go execSleep(oneExecDurationSec, user4Db2Credentials, &wg, pm)
 		wg.Add(1)
 	}
 
@@ -237,6 +222,7 @@ func TestConnectionLifetimeExeeded(t *testing.T) {
 
 	//create pool
 	pm := cpool.NewPoolFacade(1, time.Millisecond)
+	defer pm.Close()
 
 	//exec
 	_, err := pm.Exec(user5Db2Credentials, "select 1;")
@@ -280,8 +266,8 @@ func TestImpossibleCreatePoolWithInvalidConnectionLimit(t *testing.T) {
 	}
 }
 
-//ExecSleep делает запрос в бд. Длительность выполнения равна delaySec секунд
-func ExecSleep(delaySec int, credentials cpool.Credentials, wg *sync.WaitGroup, pm *cpool.PoolFacade) {
+//execSleep делает запрос в бд. Длительность выполнения равна delaySec секунд
+func execSleep(delaySec int, credentials cpool.Credentials, wg *sync.WaitGroup, pm *cpool.PoolFacade) {
 	pm.Exec(credentials, "select sleep("+strconv.Itoa(delaySec)+")")
 	wg.Done()
 }

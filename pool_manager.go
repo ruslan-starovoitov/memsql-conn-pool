@@ -3,7 +3,6 @@ package memsql_conn_pool
 import (
 	"context"
 	"errors"
-	"log"
 	"sync"
 	"time"
 
@@ -151,12 +150,10 @@ func (poolManager *PoolFacade) getOrCreateConnPool(credentials Credentials) (*Co
 		//TODO некрасиво
 		connPool.poolManager = poolManager
 		poolManager.pools.Set(credentials.GetId(), connPool)
-		log.Print("Connection pool have just created")
 		return connPool, nil
 	}
 	//Return pool if exists
 	if tmp, ok := poolManager.pools.Get(credentials.GetId()); ok {
-		log.Print("Connection pool already exists")
 		return tmp.(*ConnPool), nil
 	}
 	return nil, unableToGetPool

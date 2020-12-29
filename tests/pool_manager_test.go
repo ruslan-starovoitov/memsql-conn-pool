@@ -59,18 +59,21 @@ var credentials = []cpool.Credentials{
 }
 
 const (
-	concurrenyLevel = 10
-	idleTimeout = time.Minute
+	concurrencyLevel = 10
+	idleTimeout      = time.Minute
 )
 
 func TestCrateDBConnect(t *testing.T) {
 	t.Parallel()
 
-	pm := cpool.NewPoolFacade(concurrenyLevel, idleTimeout)
+	//Create pool
+	pm := cpool.NewPoolFacade(concurrencyLevel, idleTimeout)
 	defer pm.Close()
 
-	var result int
+	//Run simple query
 	row, err := pm.QueryRow(user1Db1Credentials, "select 1+1")
+	assert.NoError(t, err, "Unable to get connection")
+	var result int
 	err = row.Scan(&result)
 	assert.NoError(t, err, "QueryRow Scan unexpectedly failed")
 	assert.Equal(t, 2, result, "bad result")
@@ -80,10 +83,10 @@ func TestConnectToDesiredDatabase(t *testing.T) {
 	t.Parallel()
 
 	//Open pool
-	pm := cpool.NewPoolFacade(concurrenyLevel, idleTimeout)
+	pm := cpool.NewPoolFacade(concurrencyLevel, idleTimeout)
 	defer pm.Close()
 
-	for _, cr := range credentials{
+	for _, cr := range credentials {
 		//Check database name
 		row, err := pm.QueryRow(cr, "SELECT DATABASE();")
 		assert.NoError(t, err, "connection error")
@@ -99,14 +102,14 @@ func TestConnectToDesiredDatabase(t *testing.T) {
 		err = row.Scan(&user)
 		assert.NoError(t, err, "QueryRow Scan unexpectedly failed")
 		assert.Equal(t, cr.Username+"@%", user, "Did not connect as specified user")
-	}	
+	}
 }
 
 func TestPoolClosing(t *testing.T) {
 	t.Parallel()
 
 	//Open pool
-	pm := cpool.NewPoolFacade(concurrenyLevel, idleTimeout)
+	pm := cpool.NewPoolFacade(concurrencyLevel, idleTimeout)
 
 	//Check pool closing
 	pm.Close()
@@ -117,7 +120,7 @@ func TestPoolClosing(t *testing.T) {
 func TestExecFailure(t *testing.T) {
 	t.Parallel()
 
-	pm := cpool.NewPoolFacade(concurrenyLevel, idleTimeout)
+	pm := cpool.NewPoolFacade(concurrencyLevel, idleTimeout)
 	defer pm.Close()
 
 	_, err := pm.Exec(user1Db1Credentials, "incorrect sql statement;")
@@ -131,7 +134,7 @@ func TestExecFailure(t *testing.T) {
 func TestExecFailureCloseBefore(t *testing.T) {
 	t.Parallel()
 
-	pm := cpool.NewPoolFacade(concurrenyLevel, idleTimeout)
+	pm := cpool.NewPoolFacade(concurrencyLevel, idleTimeout)
 	pm.Close()
 
 	_, err := pm.Exec(user1Db1Credentials, "select 1")
@@ -250,25 +253,31 @@ func TestImpossibleCreatePoolWithInvalidConnectionLimit(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			//catch panic
 			defer func() {
 				errorHasOccurred := recover() != nil
-				if testCase.errorExpected{
+				if testCase.errorExpected {
 					assert.True(t, errorHasOccurred, "Expected an error, but it didn't happen. Pool size less than 1 cannot be created")
-				}else{
+				} else {
 					assert.False(t, errorHasOccurred, "Unexpected error. The pool can be any size greater than zero.")
 				}
-				
+
 			}()
 
+			//create pool
 			_ = cpool.NewPoolFacade(testCase.connectionLimit, time.Millisecond)
-
 		})
 	}
 }
 
+//TODO run query on database
+
 //execSleep делает запрос в бд. Длительность выполнения равна delaySec секунд
 func execSleep(delaySec int, credentials cpool.Credentials, wg *sync.WaitGroup, pm *cpool.PoolFacade) {
-	pm.Exec(credentials, "select sleep("+strconv.Itoa(delaySec)+")")
+	_, err := pm.Exec(credentials, "select sleep("+strconv.Itoa(delaySec)+")")
+	if err != nil {
+		panic(err)
+	}
 	wg.Done()
 }
 

@@ -1,21 +1,21 @@
 package memsql_conn_pool
 
 //Stats TODO возвращает статистику текущего пула
-func (poolManager * PoolFacade) Stats() PoolManagerStats {
-	poolManager.mu.Lock()
-	
-	result:=PoolManagerStats{
-		NumIdle: poolManager.numIdle,
-		NumOpen: poolManager.numOpen,
-		TotalMax: poolManager.totalMax,
+func (poolFacade *PoolFacade) Stats() PoolFacadeStats {
+	poolFacade.mu.Lock()
+
+	result := PoolFacadeStats{
+		NumIdle:  poolFacade.numIdle,
+		NumOpen:  poolFacade.numOpen,
+		TotalMax: poolFacade.totalMax,
 	}
-	poolManager.mu.Unlock()
+	poolFacade.mu.Unlock()
 	return result
 }
 
-//PoolManagerStats TODO описывает статистику пула 
-type PoolManagerStats struct{
-	NumIdle int
-	NumOpen int
+//PoolFacadeStats TODO описывает статистику пула
+type PoolFacadeStats struct {
+	NumIdle  int
+	NumOpen  int
 	TotalMax int
 }

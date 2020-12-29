@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"memsql-conn-pool/driver"
 	"reflect"
 	"runtime"
@@ -548,8 +547,7 @@ func (dc *driverConn) finalClose() error {
 	dc.connPool.mu.Lock()
 	dc.connPool.numOpen--
 	//TODO попытка открыть новые соединения
-	log.Print("finalClose call maybeOpenNewConnectionsLocked")
-	dc.connPool.poolManager.maybeOpenNewConnectionsLocked()
+	dc.connPool.poolFacade.maybeOpenNewConnectionsLocked()
 	dc.connPool.mu.Unlock()
 
 	atomic.AddUint64(&dc.connPool.numClosed, 1)
@@ -698,7 +696,6 @@ func OpenDB(c driver.Connector) *ConnPool {
 
 	return connPool
 }
-
 
 //TODO это нужно закрыть
 // Open opens a database specified by its database driver name and a
@@ -1069,7 +1066,7 @@ func (connPool *ConnPool) Stats() DBStats {
 	return stats
 }
 
-// TODO заменил глобальным maybeOpenNewConnectionsLocked в PoolManager
+// TODO заменил глобальным maybeOpenNewConnectionsLocked в poolFacade
 // TODO просит создать запрошеное кол-во соединений у другой горутины
 // TODO откуда вызывается?
 // Assumes connPool.mu is locked.
@@ -1141,7 +1138,6 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 	numFree := len(connPool.freeConn)
 	canUseIdleConnection := strategy == cachedOrNewConn && numFree > 0
 	if canUseIdleConnection {
-		log.Print("can use idle connection")
 		//remove idle connection from slice
 		conn := connPool.freeConn[0]
 		copy(connPool.freeConn, connPool.freeConn[1:])
@@ -1169,8 +1165,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		return conn, nil
 	}
 
-	if connPool.poolManager.isOpenConnectionLimitExceeded() {
-		log.Print("OpenConnectionLimitExceeded")
+	if connPool.poolFacade.isOpenConnectionLimitExceeded() {
 		// TODO try to remove idle connection from another connection pool and
 		//  wait for free connection
 
@@ -1178,15 +1173,15 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		// connectionOpener doesn't block while waiting for the responseChan to be read.
 
 		responseChan := make(chan connCreationResponse, 1)
-		reqKey := connPool.poolManager.nextRequestKeyLocked()
+		reqKey := connPool.poolFacade.nextRequestKeyLocked()
 
-		connPool.poolManager.mu.Lock()
-		connPool.poolManager.connRequests[reqKey] = connRequest{
+		connPool.poolFacade.mu.Lock()
+		connPool.poolFacade.connRequests[reqKey] = connRequest{
 			connPool: connPool,
 			responce: responseChan,
 		}
-		connPool.poolManager.waitCount++
-		connPool.poolManager.mu.Unlock()
+		connPool.poolFacade.waitCount++
+		connPool.poolFacade.mu.Unlock()
 		connPool.mu.Unlock()
 
 		waitStart := nowFunc()
@@ -1197,9 +1192,9 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		case <-ctx.Done():
 			// Remove the connection request and ensure no value has been sent
 			// on it after removing.
-			connPool.poolManager.mu.Lock()
-			delete(connPool.poolManager.connRequests, reqKey)
-			connPool.poolManager.mu.Unlock()
+			connPool.poolFacade.mu.Lock()
+			delete(connPool.poolFacade.connRequests, reqKey)
+			connPool.poolFacade.mu.Unlock()
 
 			atomic.AddInt64(&connPool.waitDuration, int64(time.Since(waitStart)))
 
@@ -1253,8 +1248,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		connPool.mu.Lock()
 		connPool.numOpen-- // correct for earlier optimism
 		//TODO попытка открыть новые соедиения
-		log.Print("conn call maybeOpenNewConnectionsLocked")
-		connPool.poolManager.maybeOpenNewConnectionsLocked()
+		connPool.poolFacade.maybeOpenNewConnectionsLocked()
 		connPool.mu.Unlock()
 		return nil, err
 	}
@@ -1336,8 +1330,7 @@ func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) 
 		// Since the conn is considered bad and is being discarded, treat it
 		// as closed. Don't decrement the open count here, finalClose will
 		// take care of that.
-		log.Print("putConn call maybeOpenNewConnectionsLocked")
-		connPool.poolManager.maybeOpenNewConnectionsLocked()
+		connPool.poolFacade.maybeOpenNewConnectionsLocked()
 		connPool.mu.Unlock()
 		dc.Close()
 		return
@@ -1367,19 +1360,19 @@ func (connPool *ConnPool) putConnDBLocked(dc *driverConn, err error) bool {
 	if connPool.closed {
 		return false
 	}
-	if connPool.poolManager.isOpenConnectionLimitExceeded() {
+	if connPool.poolFacade.isOpenConnectionLimitExceeded() {
 		return false
 	}
-	if c := len(connPool.poolManager.connRequests); c > 0 {
+	if c := len(connPool.poolFacade.connRequests); c > 0 {
 		var reqKey uint64
 		var req chan connCreationResponse
-		for key, value := range connPool.poolManager.connRequests {
+		for key, value := range connPool.poolFacade.connRequests {
 			reqKey = key
 			req = value.responce
 			break
 		}
 
-		delete(connPool.poolManager.connRequests, reqKey) // Remove from pending requests.
+		delete(connPool.poolFacade.connRequests, reqKey) // Remove from pending requests.
 		if err == nil {
 			dc.inUse = true
 		}

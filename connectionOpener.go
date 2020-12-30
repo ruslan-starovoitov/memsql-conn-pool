@@ -38,7 +38,7 @@ func (connPool *ConnPool) openNewConnection(ctx context.Context) {
 	if err != nil {
 		//connPool.numOpen--
 		connPool.poolFacade.decrementNumOpenedLocked()
-		connPool.putConnDBLocked(nil, err)
+		connPool.putConnectionConnPoolLocked(nil, err)
 		//TODO странно / попытка открыть новые соединения
 		connPool.poolFacade.maybeOpenNewConnectionsLocked()
 		return
@@ -49,7 +49,7 @@ func (connPool *ConnPool) openNewConnection(ctx context.Context) {
 		returnedAt: nowFunc(),
 		ci:         ci,
 	}
-	if connPool.putConnDBLocked(dc, err) {
+	if connPool.putConnectionConnPoolLocked(dc, err) {
 		connPool.addDepLocked(dc, dc)
 	} else {
 		//connPool.numOpen--

@@ -545,7 +545,8 @@ func (dc *driverConn) finalClose() error {
 	})
 
 	dc.connPool.mu.Lock()
-	dc.connPool.numOpen--
+	//dc.connPool.numOpen--
+	dc.connPool.poolFacade.decrementNumOpenedLocked()
 	//TODO попытка открыть новые соединения
 	dc.connPool.poolFacade.maybeOpenNewConnectionsLocked()
 	dc.connPool.mu.Unlock()
@@ -946,19 +947,21 @@ func (connPool *ConnPool) SetConnMaxIdleTime(d time.Duration) {
 
 // startCleanerLocked starts connectionCleaner if needed.
 func (connPool *ConnPool) startCleanerLocked() {
-	if (connPool.maxLifetime > 0 || connPool.maxIdleTime > 0) && connPool.numOpen > 0 && connPool.cleanerCh == nil {
+	if (connPool.maxLifetime > 0 || connPool.maxIdleTime > 0) &&
+		//connPool.numOpen > 0 &&
+		connPool.cleanerCh == nil {
 		connPool.cleanerCh = make(chan struct{}, 1)
 		go connPool.connectionCleaner(connPool.shortestIdleTimeLocked())
 	}
 }
 
-func (connPool *ConnPool) connectionCleaner(d time.Duration) {
+func (connPool *ConnPool) connectionCleaner(duration time.Duration) {
 	const minInterval = time.Second
 
-	if d < minInterval {
-		d = minInterval
+	if duration < minInterval {
+		duration = minInterval
 	}
-	t := time.NewTimer(d)
+	t := time.NewTimer(duration)
 
 	for {
 		select {
@@ -968,8 +971,10 @@ func (connPool *ConnPool) connectionCleaner(d time.Duration) {
 
 		connPool.mu.Lock()
 
-		d = connPool.shortestIdleTimeLocked()
-		if connPool.closed || connPool.numOpen == 0 || d <= 0 {
+		duration = connPool.shortestIdleTimeLocked()
+		if connPool.closed ||
+			//connPool.numOpen == 0 ||
+			duration <= 0 {
 			connPool.cleanerCh = nil
 			connPool.mu.Unlock()
 			return
@@ -981,10 +986,10 @@ func (connPool *ConnPool) connectionCleaner(d time.Duration) {
 			c.Close()
 		}
 
-		if d < minInterval {
-			d = minInterval
+		if duration < minInterval {
+			duration = minInterval
 		}
-		t.Reset(d)
+		t.Reset(duration)
 	}
 }
 
@@ -1025,15 +1030,15 @@ func (connPool *ConnPool) connectionCleanerRunLocked() (closing []*driverConn) {
 	return
 }
 
-// DBStats contains database statistics.
-type DBStats struct {
+// ConnPoolStats contains database statistics.
+type ConnPoolStats struct {
 	//TODO unlimited
 	//MaxOpenConnections int // Maximum number of open connections to the database.
 
 	// Pool Status
-	OpenConnections int // The number of established connections both in use and idle.
-	InUse           int // The number of connections currently in use.
-	Idle            int // The number of idle connections.
+	//OpenConnections int // The number of established connections both in use and idle.
+	InUse int // The number of connections currently in use.
+	Idle  int // The number of idle connections.
 
 	// Counters
 	WaitCount         int64         // The total number of connections waited for.
@@ -1044,18 +1049,19 @@ type DBStats struct {
 }
 
 // Stats returns database statistics.
-func (connPool *ConnPool) Stats() DBStats {
+func (connPool *ConnPool) Stats() ConnPoolStats {
 	wait := atomic.LoadInt64(&connPool.waitDuration)
 
 	connPool.mu.Lock()
 	defer connPool.mu.Unlock()
 
-	stats := DBStats{
+	stats := ConnPoolStats{
 		//MaxOpenConnections: connPool.maxOpen,
 
-		Idle:            len(connPool.freeConn),
-		OpenConnections: connPool.numOpen,
-		InUse:           connPool.numOpen - len(connPool.freeConn),
+		Idle: len(connPool.freeConn),
+		//OpenConnections: connPool.numOpen,
+		//TODO добавить подсчёт InUse
+		//InUse:           connPool.numOpen - len(connPool.freeConn),
 
 		//WaitCount:         connPool.waitCount,
 		WaitDuration:      time.Duration(wait),
@@ -1240,13 +1246,15 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		}
 	}
 
-	connPool.numOpen++ // optimistically
+	connPool.poolFacade.incrementNumOpenedLocked()
+	//connPool.numOpen++ // optimistically
 	connPool.mu.Unlock()
 	//Создание нового соединения
 	ci, err := connPool.connector.Connect(ctx)
 	if err != nil {
 		connPool.mu.Lock()
-		connPool.numOpen-- // correct for earlier optimism
+		connPool.poolFacade.decrementNumOpenedLocked()
+		//connPool.numOpen-- // correct for earlier optimism
 		//TODO попытка открыть новые соедиения
 		connPool.poolFacade.maybeOpenNewConnectionsLocked()
 		connPool.mu.Unlock()

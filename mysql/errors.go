@@ -62,4 +62,4 @@ type MySQLError struct {
 
 func (me *MySQLError) Error() string {
 	return fmt.Sprintf("Error %d: %s", me.Number, me.Message)
-}	
+}

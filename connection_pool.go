@@ -6,6 +6,18 @@ import (
 	"time"
 )
 
+type demo struct {
+	someNumber int
+}
+
+func (d *demo) Demo() int {
+	return d.someNumber
+}
+
+func (d *demo) SetDemo(value int) {
+	d.someNumber = value
+}
+
 // ConnPool is a database handle representing a pool of zero or more
 // underlying connections. It's safe for concurrent use by multiple
 // goroutines.
@@ -19,6 +31,7 @@ import (
 // connection is returned to ConnPool's idle connection pool. The pool size
 // can be controlled with SetMaxIdleConns.
 type ConnPool struct {
+	demo
 	poolFacade *PoolFacade
 
 	// Atomic access only. At top of struct to prevent mis-alignment
@@ -36,7 +49,7 @@ type ConnPool struct {
 	//connRequests map[uint64]chan connCreationResponse
 	//nextRequest  uint64 // Next key to use in connRequests.
 	//TODO numInUse + numIdle
-	numOpen int // number of opened and pending open connections
+	//numOpen int // number of opened and pending open connections
 	// Used to signal the need for new connections
 	// a goroutine running connectionOpener() reads on this chan and
 	// maybeOpenNewConnectionsLocked sends on the chan (one send per needed connection)
@@ -52,7 +65,8 @@ type ConnPool struct {
 	//maxOpen           int                    // <= 0 means unlimited
 	maxLifetime time.Duration // maximum amount of time a connection may be reused
 	maxIdleTime time.Duration // maximum amount of time a connection may be idle before being closed
-	cleanerCh   chan struct{}
+
+	cleanerCh chan struct{} //TODO что это maxLifetime was changed or connPool was closed.
 	//waitCount         int64 // Total number of connections waited for.
 	maxIdleClosed     int64 // Total number of connections closed due to idle count.
 	maxIdleTimeClosed int64 // Total number of connections closed due to idle time.

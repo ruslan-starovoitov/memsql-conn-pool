@@ -66,13 +66,14 @@ const (
 func TestCrateDBConnect(t *testing.T) {
 	t.Parallel()
 
-	//Create pool
+	// Create pool
 	pm := cpool.NewPoolFacade(concurrencyLevel, idleTimeout)
 	defer pm.Close()
 
-	//Run simple query
+	// Run simple query
 	row, err := pm.QueryRow(user1Db1Credentials, "select 1+1")
 	assert.NoError(t, err, "Unable to get connection")
+
 	var result int
 	err = row.Scan(&result)
 	assert.NoError(t, err, "QueryRow Scan unexpectedly failed")
@@ -82,22 +83,24 @@ func TestCrateDBConnect(t *testing.T) {
 func TestConnectToDesiredDatabase(t *testing.T) {
 	t.Parallel()
 
-	//Open pool
+	// Create pool
 	pm := cpool.NewPoolFacade(concurrencyLevel, idleTimeout)
 	defer pm.Close()
 
 	for _, cr := range credentials {
-		//Check database name
+		// Check database name
 		row, err := pm.QueryRow(cr, "SELECT DATABASE();")
 		assert.NoError(t, err, "connection error")
+
 		var currentDB string
 		err = row.Scan(&currentDB)
 		assert.NoError(t, err, "QueryRow Scan unexpectedly failed")
 		assert.Equal(t, cr.Database, currentDB, "Did not connect to specified database ")
 
-		//Check user name
+		// Check user name
 		row, err = pm.QueryRow(cr, "select current_user")
 		assert.NoError(t, err, "connection error")
+
 		var user string
 		err = row.Scan(&user)
 		assert.NoError(t, err, "QueryRow Scan unexpectedly failed")
@@ -108,10 +111,10 @@ func TestConnectToDesiredDatabase(t *testing.T) {
 func TestPoolClosing(t *testing.T) {
 	t.Parallel()
 
-	//Open pool
+	// Create pool
 	pm := cpool.NewPoolFacade(concurrencyLevel, idleTimeout)
 
-	//Check pool closing
+	// Check pool closing
 	pm.Close()
 	_, err := pm.QueryRow(user1Db1Credentials, "select 1+1")
 	assert.Error(t, err, "Unable to close connection")
@@ -141,57 +144,38 @@ func TestExecFailureCloseBefore(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestNumberOfIdleConnectionsOneUser(t *testing.T) {
+// the pool will release idle connection if limit
+func TestNumberOfIdleConnections(t *testing.T) {
 	t.Parallel()
 
-	//create pool
-	conenctionLimit := 5
-	pm := cpool.NewPoolFacade(conenctionLimit, idleTimeout)
+	// create pool
+	connectionLimit := 5
+	pm := cpool.NewPoolFacade(connectionLimit, idleTimeout)
+
 	defer pm.Close()
 	var wg sync.WaitGroup
 
-	//parallel requests
-	for i := 0; i < conenctionLimit; i++ {
-		go execSleep(2, user1Db1Credentials, &wg, pm)
+	// parallel requests
+	for i := 0; i < connectionLimit; i++ {
 		wg.Add(1)
-	}
-
-	//wait
-	wg.Wait()
-
-	//check open conenctions
-	stats := pm.Stats()
-	assert.Equal(t, conenctionLimit, stats.NumIdle)
-}
-
-//the pool will release idle connection if limit
-func TestNumberOfIdleConnectionsMultipleUsers(t *testing.T) {
-	t.Parallel()
-
-	//create pool
-	conenctionLimit := 5
-	pm := cpool.NewPoolFacade(conenctionLimit, idleTimeout)
-	defer pm.Close()
-	var wg sync.WaitGroup
-
-	//parallel requests
-	for i := 0; i < conenctionLimit; i++ {
 		go execSleep(2, credentials[i], &wg, pm)
-		wg.Add(1)
 	}
 
-	//wait
+	// wait
 	wg.Wait()
-
-	//check open conenctions
+	time.Sleep(time.Second * 5)
+	// check open connections
 	stats := pm.Stats()
-	assert.Equal(t, conenctionLimit, stats.NumIdle)
+	assert.Equal(t, connectionLimit, stats.NumUniqueDSNs)
+	assert.Equal(t, connectionLimit, stats.TotalMax)
+	assert.Equal(t, connectionLimit, stats.NumOpen)
+	assert.Equal(t, connectionLimit, stats.NumIdle)
 }
 
 func TestReleaseIdleConnectionIfLimitExeeded(t *testing.T) {
 	t.Parallel()
 
-	//create pool
+	// create pool
 	conenctionLimit := 5
 	oneExecDurationSec := 2
 	expectedTotalDurationSec := 2 * oneExecDurationSec
@@ -201,13 +185,16 @@ func TestReleaseIdleConnectionIfLimitExeeded(t *testing.T) {
 
 	//parallel requests
 	for i := 0; i < conenctionLimit+1; i++ {
-		go execSleep(oneExecDurationSec, user4Db2Credentials, &wg, pm)
 		wg.Add(1)
+		go execSleep(oneExecDurationSec, user4Db2Credentials, &wg, pm)
 	}
 
 	start := time.Now()
 	//wait
-	wg.Wait()
+
+	if waitTimeout(&wg, time.Second*10) {
+		assert.Fail(t, "To long query execution. Probably pool doesn't support lifetime exeed")
+	}
 
 	duration := time.Since(start)
 

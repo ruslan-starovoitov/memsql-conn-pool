@@ -49,7 +49,7 @@ func main() {
 	}
 
 	connPool := cpool.NewPoolFacade(100, time.Minute)
-	
+
 	reader := reader{}
 	wg := sync.WaitGroup{}
 
@@ -61,7 +61,7 @@ func main() {
 	// }
 
 	// wg.Wait()
-	
+
 	log.Print("start reading")
 	for _, cr := range credentials {
 		wg.Add(1)

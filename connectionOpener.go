@@ -6,13 +6,13 @@ import (
 
 //TODO создаёт новое соединение в контексте без проверок ограничений
 // копия connectionOpener
-func (poolFacade *PoolFacade) globalConnectionOpener(ctx context.Context) {
+func (pf *PoolFacade) globalConnectionOpener(ctx context.Context) {
 	//ждём пока контекст закроется или попросят открыть новое соединение
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case connPool := <-poolFacade.openerChannel:
+		case connPool := <-pf.openerChannel:
 			connPool.openNewConnection(ctx)
 		}
 	}
@@ -31,11 +31,13 @@ func (connPool *ConnPool) openNewConnection(ctx context.Context) {
 		if err == nil {
 			ci.Close()
 		}
-		connPool.numOpen--
+		//connPool.numOpen--
+		connPool.poolFacade.decrementNumOpenedLocked()
 		return
 	}
 	if err != nil {
-		connPool.numOpen--
+		//connPool.numOpen--
+		connPool.poolFacade.decrementNumOpenedLocked()
 		connPool.putConnDBLocked(nil, err)
 		//TODO странно / попытка открыть новые соединения
 		connPool.poolFacade.maybeOpenNewConnectionsLocked()
@@ -50,16 +52,17 @@ func (connPool *ConnPool) openNewConnection(ctx context.Context) {
 	if connPool.putConnDBLocked(dc, err) {
 		connPool.addDepLocked(dc, dc)
 	} else {
-		connPool.numOpen--
+		//connPool.numOpen--
+		connPool.poolFacade.decrementNumOpenedLocked()
 		ci.Close()
 	}
 }
 
 // nextRequestKeyLocked returns the next connection request key.
 // It is assumed that nextRequest will not overflow.
-func (poolFacade *PoolFacade) nextRequestKeyLocked() uint64 {
-	next := poolFacade.nextRequest
-	poolFacade.nextRequest++
+func (pf *PoolFacade) nextRequestKeyLocked() uint64 {
+	next := pf.nextRequest
+	pf.nextRequest++
 	return next
 }
 
@@ -68,25 +71,25 @@ func (poolFacade *PoolFacade) nextRequestKeyLocked() uint64 {
 // Assumes poolFacade.mu is locked.
 // If there are connRequests and the connection limit hasn't been reached,
 // then tell the connectionOpener to open new connections.
-func (poolFacade *PoolFacade) maybeOpenNewConnectionsLocked() {
-	poolFacade.mu.Lock()
-	numRequests := len(poolFacade.connRequests)
+func (pf *PoolFacade) maybeOpenNewConnectionsLocked() {
+	pf.mu.Lock()
+	numRequests := len(pf.connRequests)
 
-	if poolFacade.totalMax > 0 {
-		numCanOpen := poolFacade.totalMax - poolFacade.numOpen
+	if pf.totalMax > 0 {
+		numCanOpen := pf.totalMax - pf.numOpen
 		if numCanOpen < numRequests {
 			numRequests = numCanOpen
 		}
 	}
 
-	for _, value := range poolFacade.connRequests {
-		poolFacade.numOpen++ // optimistically
-		if poolFacade.closed {
+	for _, value := range pf.connRequests {
+		pf.numOpen++ // optimistically
+		if pf.closed {
 			return
 		}
 
 		//Дать команду создать соединение для конкретного пула
-		poolFacade.openerChannel <- value.connPool
+		pf.openerChannel <- value.connPool
 
 		numRequests--
 		if numRequests == 0 {
@@ -94,5 +97,5 @@ func (poolFacade *PoolFacade) maybeOpenNewConnectionsLocked() {
 		}
 	}
 
-	poolFacade.mu.Unlock()
+	pf.mu.Unlock()
 }

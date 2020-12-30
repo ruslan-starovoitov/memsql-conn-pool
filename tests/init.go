@@ -14,7 +14,6 @@ var initCredentials = cpool.Credentials{
 	Database: "information_schema",
 }
 
-
 const (
 	userAlreadyExistsErrorNumber = 1924
 )
@@ -53,7 +52,7 @@ func init() {
 	tx, err := pm.BeginTx(initCredentials)
 	for _, statement := range statements {
 		fmt.Print(statement)
-		if len(statement)==0{
+		if len(statement) == 0 {
 			continue
 		}
 		_, err = tx.Exec(statement)

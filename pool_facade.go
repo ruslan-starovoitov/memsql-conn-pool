@@ -12,10 +12,11 @@ import (
 //PoolFacade содержит хеш-таблицу пулов соединений. Он содержит
 //общие ограничения на количество соединений
 type PoolFacade struct {
-	pools cmap.ConcurrentMap
-	ctx   context.Context
+	driverName string //mysql
+	pools      cmap.ConcurrentMap
+	ctx        context.Context
 
-	totalMax int
+	totalMax int // <= 0 means unlimited
 	//numIdle   int
 	numOpen   int
 	waitCount int64 // Total number of connections waited for.
@@ -32,15 +33,14 @@ type PoolFacade struct {
 }
 
 //NewPoolFacade создаёт новый пул соединений
-func NewPoolFacade(connectionLimit int, idleTimeout time.Duration) *PoolFacade {
-	if connectionLimit <= 0 {
-		panic("it doesn't make sense to create a pool with such connection limit ")
-	}
+// если idleTimeout будет установлен меньше, чем одна секунда, то он автоматически будет заменен на одну секунду
+func NewPoolFacade(driverName string, connectionLimit int, idleTimeout time.Duration) *PoolFacade {
 	poolFacade := PoolFacade{
 		pools:        cmap.New(),
 		totalMax:     connectionLimit,
 		idleTimeout:  idleTimeout,
 		connRequests: make(map[uint64]connRequest),
+		driverName:   driverName,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	poolFacade.ctx = ctx
@@ -141,6 +141,8 @@ func (pf *PoolFacade) getOrCreateConnPool(credentials Credentials) (*ConnPool, e
 	if !pf.pools.Has(credentials.GetId()) {
 		dsn := GetDataSourceName(credentials)
 		//TODO заменить название драйвера
+		//TODO это плохо что общая библиотека зависит от mysql
+		//нужно, чтобы название драйвера устанавливалось при инициализации пула
 		connPool, err := Open("mysql", dsn)
 		if err != nil {
 			return nil, err

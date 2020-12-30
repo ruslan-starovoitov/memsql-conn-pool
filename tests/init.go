@@ -3,7 +3,7 @@ package memsql_conn_pool_tests
 import (
 	"fmt"
 	cpool "memsql-conn-pool"
-	mysql "memsql-conn-pool/mysql"
+	"memsql-conn-pool/mysql"
 	"strings"
 	"time"
 )
@@ -19,7 +19,7 @@ const (
 )
 
 func init() {
-	pm := cpool.NewPoolFacade(1, time.Second)
+	pm := cpool.NewPoolFacade("mysql", 1, time.Second)
 
 	sql := `
 	CREATE DATABASE IF NOT EXISTS hellomemsql;
@@ -49,13 +49,17 @@ func init() {
 
 	FLUSH PRIVILEGES;`
 	statements := strings.Split(sql, ";")
-	tx, err := pm.BeginTx(initCredentials)
+	tx, errTx := pm.BeginTx(initCredentials)
+	if errTx != nil {
+		panic(errTx)
+	}
+
 	for _, statement := range statements {
-		fmt.Print(statement)
+		fmt.Printf(statement)
 		if len(statement) == 0 {
 			continue
 		}
-		_, err = tx.Exec(statement)
+		_, err := tx.Exec(statement)
 		if err != nil {
 			//Ignore User already exists error
 			if value, ok := err.(*mysql.MySQLError); ok {
@@ -68,8 +72,8 @@ func init() {
 		}
 	}
 
-	err = tx.Commit()
-	if err != nil {
-		panic(err)
+	errCommit := tx.Commit()
+	if errCommit != nil {
+		panic(errCommit)
 	}
 }

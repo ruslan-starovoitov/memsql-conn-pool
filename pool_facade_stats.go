@@ -1,4 +1,9 @@
-package memsql_conn_pool
+package cpool
+
+import (
+	"log"
+	"strconv"
+)
 
 func (pf *PoolFacade) incrementNumOpenedLocked() {
 	pf.mu.Lock()
@@ -41,4 +46,21 @@ type PoolFacadeStats struct {
 	NumOpen       int
 	TotalMax      int
 	NumUniqueDSNs int
+}
+
+func (pf *PoolFacade) StatsOfAllPools() []ConnPoolStats {
+	pf.mu.Lock()
+	countOfPools := pf.pools.Count()
+	countOfPoolsStr := strconv.Itoa(countOfPools)
+	statsArray := make([]ConnPoolStats, 0)
+
+	log.Print("AAA/Number of pools " + countOfPoolsStr)
+	for tuple := range pf.pools.IterBuffered() {
+		log.Print("key is " + tuple.Key)
+		connPool := tuple.Val.(*ConnPool)
+		stats := connPool.Stats()
+		statsArray = append(statsArray, stats)
+	}
+	pf.mu.Unlock()
+	return statsArray
 }

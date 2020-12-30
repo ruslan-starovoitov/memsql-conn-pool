@@ -13,14 +13,14 @@
 //
 // For usage examples, see the wiki page at
 // https://golang.org/s/sqlwiki.
-package memsql_conn_pool
+package cpool
 
 import (
 	"context"
+	"cpool/driver"
 	"errors"
 	"fmt"
 	"io"
-	"memsql-conn-pool/driver"
 	"reflect"
 	"runtime"
 	"sort"

@@ -18,8 +18,8 @@ package mysql
 
 import (
 	"context"
-	cpool "memsql-conn-pool"
-	"memsql-conn-pool/driver"
+	cpool "cpool"
+	"cpool/driver"
 	"net"
 	"sync"
 )

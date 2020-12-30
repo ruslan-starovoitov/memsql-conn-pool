@@ -9,8 +9,8 @@
 package mysql
 
 import (
-	cpool "memsql-conn-pool"
-	"memsql-conn-pool/driver"
+	cpool "cpool"
+	"cpool/driver"
 	"testing"
 	"time"
 )

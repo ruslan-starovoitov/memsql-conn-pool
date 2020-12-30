@@ -9,7 +9,7 @@
 package mysql
 
 import (
-	cpool "memsql-conn-pool"
+	cpool "cpool"
 	"reflect"
 )
 

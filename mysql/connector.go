@@ -10,7 +10,7 @@ package mysql
 
 import (
 	"context"
-	"memsql-conn-pool/driver"
+	"cpool/driver"
 	"net"
 )
 

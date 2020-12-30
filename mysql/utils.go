@@ -9,13 +9,13 @@
 package mysql
 
 import (
+	cpool "cpool"
+	"cpool/driver"
 	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
-	cpool "memsql-conn-pool"
-	"memsql-conn-pool/driver"
 	"strconv"
 	"strings"
 	"sync"

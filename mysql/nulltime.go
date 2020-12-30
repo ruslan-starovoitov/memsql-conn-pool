@@ -9,8 +9,8 @@
 package mysql
 
 import (
+	"cpool/driver"
 	"fmt"
-	"memsql-conn-pool/driver"
 	"time"
 )
 

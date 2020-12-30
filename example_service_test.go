@@ -2,7 +2,7 @@
 // // Use of this source code is governed by a BSD-style
 // // license that can be found in the LICENSE file.
 
-package memsql_conn_pool_test
+package cpool_test
 
 // import (
 // 	"context"
@@ -10,7 +10,7 @@ package memsql_conn_pool_test
 // 	"fmt"
 // 	"io"
 // 	"log"
-// 	cpool "memsql-conn-pool"
+// 	cpool "cpool"
 // 	"net/http"
 // 	"time"
 // )

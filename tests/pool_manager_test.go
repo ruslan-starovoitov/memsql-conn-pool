@@ -1,8 +1,9 @@
-package memsql_conn_pool_tests
+package cpool_tests
 
 import (
-	cpool "memsql-conn-pool"
-	_ "memsql-conn-pool/mysql"
+	cpool "cpool"
+	_ "cpool/mysql"
+	"log"
 	"strconv"
 	"sync"
 	"testing"
@@ -144,21 +145,29 @@ func TestExecFailureCloseBefore(t *testing.T) {
 }
 
 //проверка правильной статистики с одним соединением
-//func TestStatsOneConnection(t *testing.T){
-//	t.Parallel()
-//	pm := cpool.NewPoolFacade("mysql", 1, idleTimeout)
-//
-//	var wg sync.WaitGroup
-//	go execSleep(2, user5Db2Credentials, &wg, pm)
-//
-//	wg.Wait()
-//
-//	stats := pm.Stats()
-//	assert.Equal(t, 1, stats.NumUniqueDSNs)
-//	assert.Equal(t, 1, stats.TotalMax)
-//	assert.Equal(t, 1, stats.NumIdle)
-//	assert.Equal(t, 1, stats.NumOpen)
-//}
+func TestStatsOneConnection(t *testing.T) {
+	t.Parallel()
+	pm := cpool.NewPoolFacade("mysql", 1, idleTimeout)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go execSleep(2, user5Db2Credentials, &wg, pm)
+
+	wg.Wait()
+
+	stats := pm.Stats()
+	allStats := pm.StatsOfAllPools()
+	length := strconv.Itoa(len(allStats))
+	log.Print("len " + length)
+	for _, value := range allStats {
+		log.Printf("%+v\n", value)
+	}
+	log.Printf("%+v\n", stats)
+	assert.Equal(t, 1, stats.NumUniqueDSNs, "number of unique dsn")
+	assert.Equal(t, 1, stats.TotalMax, "total max")
+	assert.Equal(t, 1, stats.NumIdle, "num idle")
+	assert.Equal(t, 1, stats.NumOpen, "num open")
+}
 
 // the pool will release idle connection if limit
 //func TestNumberOfIdleConnections(t *testing.T) {
@@ -278,8 +287,8 @@ func execSleep(delaySec int, credentials cpool.Credentials, wg *sync.WaitGroup, 
 	if err != nil {
 		panic(err)
 	}
-	wg.Done()
 
+	wg.Done()
 }
 
 // waitTimeout waits for the waitgroup for the specified max timeout.

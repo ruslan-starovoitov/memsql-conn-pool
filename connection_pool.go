@@ -1,7 +1,7 @@
-package memsql_conn_pool
+package cpool
 
 import (
-	"memsql-conn-pool/driver"
+	"cpool/driver"
 	"sync"
 	"time"
 )

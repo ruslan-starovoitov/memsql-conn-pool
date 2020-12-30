@@ -9,9 +9,9 @@
 package mysql
 
 import (
+	"cpool/driver"
 	"io"
 	"math"
-	"memsql-conn-pool/driver"
 	"reflect"
 )
 

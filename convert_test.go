@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package memsql_conn_pool
+package cpool
 
 import (
+	"cpool/driver"
 	"fmt"
-	"memsql-conn-pool/driver"
 	"reflect"
 	"runtime"
 	"strings"

@@ -1,4 +1,4 @@
-module memsql-conn-pool
+module cpool
 
 go 1.15
 

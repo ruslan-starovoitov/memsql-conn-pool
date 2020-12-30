@@ -1,7 +1,7 @@
 package main
 
 import (
-	cpool "memsql-conn-pool"
+	cpool "cpool"
 	"sync"
 )
 

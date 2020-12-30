@@ -12,9 +12,9 @@ import (
 	// "bytes"
 	// "context"
 	// "fmt"
+	cpool "cpool"
+	"cpool/driver"
 	"math"
-	cpool "memsql-conn-pool"
-	"memsql-conn-pool/driver"
 
 	// "runtime"
 	"strings"

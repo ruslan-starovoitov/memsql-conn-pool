@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package memsql_conn_pool
+package cpool
 
 import (
 	"context"
+	"cpool/driver"
 	"errors"
-	"memsql-conn-pool/driver"
 )
 
 func ctxDriverPrepare(ctx context.Context, ci driver.Conn, query string) (driver.Stmt, error) {

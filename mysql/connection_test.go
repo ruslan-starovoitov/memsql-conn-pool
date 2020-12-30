@@ -10,9 +10,9 @@ package mysql
 
 import (
 	"context"
+	"cpool/driver"
 	"encoding/json"
 	"errors"
-	"memsql-conn-pool/driver"
 	"net"
 	"testing"
 )

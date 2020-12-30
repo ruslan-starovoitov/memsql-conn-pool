@@ -1,4 +1,4 @@
-package memsql_conn_pool
+package cpool
 
 //connRequest добавляется в connRequests когда ConnPool не может использовать закешированные соединения
 type connRequest struct {

@@ -10,9 +10,9 @@ package mysql
 
 import (
 	"bytes"
+	cpool "cpool"
+	"cpool/driver"
 	"encoding/binary"
-	cpool "memsql-conn-pool"
-	"memsql-conn-pool/driver"
 	"testing"
 	"time"
 )

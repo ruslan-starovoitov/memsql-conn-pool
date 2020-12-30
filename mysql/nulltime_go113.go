@@ -11,7 +11,7 @@
 package mysql
 
 import (
-	cpool "memsql-conn-pool"
+	cpool "cpool"
 )
 
 // NullTime represents a time.Time that may be NULL.

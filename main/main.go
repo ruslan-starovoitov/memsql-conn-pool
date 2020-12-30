@@ -1,9 +1,9 @@
 package main
 
 import (
+	cpool "cpool"
+	_ "cpool/mysql"
 	"log"
-	cpool "memsql-conn-pool"
-	_ "memsql-conn-pool/mysql"
 	"sync"
 	"time"
 )
@@ -48,7 +48,7 @@ func main() {
 		},
 	}
 
-	connPool := cpool.NewPoolFacade(100, time.Minute)
+	connPool := cpool.NewPoolFacade("mysql", 100, time.Minute)
 
 	reader := reader{}
 	wg := sync.WaitGroup{}

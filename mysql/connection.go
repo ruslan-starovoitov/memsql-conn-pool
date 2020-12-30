@@ -10,10 +10,10 @@ package mysql
 
 import (
 	"context"
+	cpool "cpool"
+	"cpool/driver"
 	"encoding/json"
 	"io"
-	cpool "memsql-conn-pool"
-	"memsql-conn-pool/driver"
 	"net"
 	"strconv"
 	"strings"

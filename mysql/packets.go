@@ -10,6 +10,7 @@ package mysql
 
 import (
 	"bytes"
+	"cpool/driver"
 	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
@@ -17,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"memsql-conn-pool/driver"
 	"time"
 )
 

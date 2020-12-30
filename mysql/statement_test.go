@@ -10,8 +10,8 @@ package mysql
 
 import (
 	"bytes"
+	"cpool/driver"
 	"encoding/json"
-	"memsql-conn-pool/driver"
 	"testing"
 )
 

@@ -1,4 +1,4 @@
-package memsql_conn_pool
+package cpool
 
 import "errors"
 

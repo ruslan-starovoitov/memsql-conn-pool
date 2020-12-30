@@ -1,9 +1,9 @@
-package memsql_conn_pool_tests
+package cpool_tests
 
 import (
-	"fmt"
-	cpool "memsql-conn-pool"
-	"memsql-conn-pool/mysql"
+	cpool "cpool"
+	"cpool/mysql"
+	"log"
 	"strings"
 	"time"
 )
@@ -20,7 +20,6 @@ const (
 
 func init() {
 	pm := cpool.NewPoolFacade("mysql", 1, time.Second)
-
 	sql := `
 	CREATE DATABASE IF NOT EXISTS hellomemsql;
 	CREATE TABLE IF NOT EXISTS hellomemsql.test (message text NOT NULL);	
@@ -55,7 +54,7 @@ func init() {
 	}
 
 	for _, statement := range statements {
-		fmt.Printf(statement)
+		log.Print(statement)
 		if len(statement) == 0 {
 			continue
 		}

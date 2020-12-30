@@ -11,7 +11,7 @@
 package mysql
 
 import (
-	cpool "memsql-conn-pool"
+	cpool "cpool"
 )
 
 func Fuzz(data []byte) int {

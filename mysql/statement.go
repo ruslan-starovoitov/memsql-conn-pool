@@ -9,10 +9,10 @@
 package mysql
 
 import (
+	"cpool/driver"
 	"encoding/json"
 	"fmt"
 	"io"
-	"memsql-conn-pool/driver"
 	"reflect"
 )
 

@@ -6,18 +6,6 @@ import (
 	"time"
 )
 
-type demo struct {
-	someNumber int
-}
-
-func (d *demo) Demo() int {
-	return d.someNumber
-}
-
-func (d *demo) SetDemo(value int) {
-	d.someNumber = value
-}
-
 // ConnPool is a database handle representing a pool of zero or more
 // underlying connections. It's safe for concurrent use by multiple
 // goroutines.
@@ -31,7 +19,6 @@ func (d *demo) SetDemo(value int) {
 // connection is returned to ConnPool's idle connection pool. The pool size
 // can be controlled with SetMaxIdleConns.
 type ConnPool struct {
-	demo
 	poolFacade *PoolFacade
 
 	// Atomic access only. At top of struct to prevent mis-alignment

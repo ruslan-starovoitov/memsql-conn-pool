@@ -3,8 +3,9 @@ package cpool_tests
 import (
 	cpool "cpool"
 	_ "cpool/mysql"
+	"fmt"
 	"log"
-	"strconv"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -144,95 +145,158 @@ func TestExecFailureCloseBefore(t *testing.T) {
 	require.Error(t, err)
 }
 
-//проверка правильной статистики с одним соединением
-func TestStatsOneConnection(t *testing.T) {
+//Проверка переиспользования одного соединения
+func TestConnectionReuseInSequentialRequests(t *testing.T) {
 	t.Parallel()
-	pm := cpool.NewPoolFacade("mysql", 1, idleTimeout)
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go execSleep(2, user5Db2Credentials, &wg, pm)
-
-	wg.Wait()
-
-	stats := pm.Stats()
-	allStats := pm.StatsOfAllPools()
-	length := strconv.Itoa(len(allStats))
-	log.Print("len " + length)
-	for _, value := range allStats {
-		log.Printf("%+v\n", value)
+	testCases := []struct {
+		name     string
+		function func(delay int, cr cpool.Credentials, facade *cpool.PoolFacade)
+	}{
+		{"exec", execSleep},
+		{"query", querySleep},
+		{"queryRow", queryRowSleep},
+		{"exec and query", func(delaySec int, cr cpool.Credentials, pf *cpool.PoolFacade) {
+			execSleep(delaySec, cr, pf)
+			querySleep(delaySec, cr, pf)
+		}},
 	}
-	log.Printf("%+v\n", stats)
-	assert.Equal(t, 1, stats.NumUniqueDSNs, "number of unique dsn")
-	assert.Equal(t, 1, stats.TotalMax, "total max")
-	assert.Equal(t, 1, stats.NumIdle, "num idle")
-	assert.Equal(t, 1, stats.NumOpen, "num open")
+	const connectionLimit = 100
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			pm := cpool.NewPoolFacade("mysql", connectionLimit, time.Minute)
+			defer pm.Close()
+
+			//execute sequential requests
+			for i := 0; i < 5; i++ {
+				testCase.function(1, user4Db2Credentials, pm)
+			}
+
+			time.Sleep(time.Second * 2)
+
+			//check that only one connection was created
+			stats := pm.Stats()
+			assert.Equal(t, 1, stats.NumUniqueDSNs, "number of unique dsn")
+			assert.Equal(t, connectionLimit, stats.TotalMax, "total max")
+			assert.Equal(t, 1, stats.NumIdle, "num idle")
+			assert.Equal(t, 0, stats.NumOpen, "num open")
+		})
+	}
 }
 
-// the pool will release idle connection if limit
-//func TestNumberOfIdleConnections(t *testing.T) {
-//	t.Parallel()
-//
-//	// create pool
-//	connectionLimit := 5
-//	pm := cpool.NewPoolFacade("mysql", connectionLimit, idleTimeout)
-//
-//	defer pm.Close()
-//
-//	var wg sync.WaitGroup
-//	// parallel requests
-//	for i := 0; i < connectionLimit; i++ {
-//		wg.Add(1)
-//
-//		go execSleep(2, credentials[i], &wg, pm)
-//	}
-//
-//	// wait
-//	wg.Wait()
-//	time.Sleep(time.Second * 5)
-//	// check open connections
-//	stats := pm.Stats()
-//	assert.Equal(t, connectionLimit, stats.NumUniqueDSNs)
-//	assert.Equal(t, connectionLimit, stats.TotalMax)
-//	assert.Equal(t, connectionLimit, stats.NumOpen)
-//	assert.Equal(t, connectionLimit, stats.NumIdle)
-//}
-//
-//func TestReleaseIdleConnectionIfLimitExeeded(t *testing.T) {
-//	t.Parallel()
-//
-//	// create pool
-//	connectionLimit := 5
-//	oneExecDurationSec := 2
-//	expectedTotalDurationSec := 2 * oneExecDurationSec
-//	pm := cpool.NewPoolFacade("mysql", connectionLimit, idleTimeout)
-//
-//	defer pm.Close()
-//
-//	var wg sync.WaitGroup
-//
-//	// parallel requests
-//	for i := 0; i < connectionLimit+1; i++ {
-//		wg.Add(1)
-//		go execSleep(oneExecDurationSec, user4Db2Credentials, &wg, pm)
-//	}
-//
-//	start := time.Now()
-//	// wait
-//
-//	if waitTimeout(&wg, time.Second*10) {
-//		assert.Fail(t, "To long query execution. Probably pool doesn't support lifetime exeed")
-//	}
-//
-//	duration := time.Since(start)
-//
-//	dirationIs4Sec := math.Round(duration.Seconds())
-//	assert.Equal(t, expectedTotalDurationSec, dirationIs4Sec)
-//
-//	// check open connections
-//	stats := pm.Stats()
-//	assert.Equal(t, connectionLimit, stats.NumIdle)
-//}
+//проверка правильной статистики с одним соединением
+func TestStatsOneConnectionExec(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		function func(delay int, cr cpool.Credentials, group *sync.WaitGroup, facade *cpool.PoolFacade)
+	}{
+		{"exec", execSleepWait},
+		{"query", querySleepWait},
+		{"queryRow", queryRowSleepWait},
+		{"exec and query", func(delay int, cr cpool.Credentials, wg *sync.WaitGroup, pf *cpool.PoolFacade) {
+			execSleepWait(delay, cr, wg, pf)
+			querySleepWait(delay, cr, wg, pf)
+		}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			pm := cpool.NewPoolFacade("mysql", 1, idleTimeout)
+			var wg sync.WaitGroup
+			wg.Add(1)
+			//run query to database
+			go testCase.function(1, user5Db2Credentials, &wg, pm)
+
+			wg.Wait()
+
+			//check pool facade stats
+			stats := pm.Stats()
+			log.Printf("%+v\n", stats)
+			assert.Equal(t, 1, stats.NumUniqueDSNs, "number of unique dsn")
+			assert.Equal(t, 1, stats.TotalMax, "total max")
+			assert.Equal(t, 1, stats.NumIdle, "num idle")
+			assert.Equal(t, 1, stats.NumOpen, "num open")
+
+			//check pool stats
+			allStats := pm.StatsOfAllPools()
+			countOfPools := len(allStats)
+			assert.Equal(t, 1, countOfPools, "too many pools")
+			connPoolStats := allStats[0]
+			assert.Equal(t, 1, connPoolStats.Idle)
+			assert.Equal(t, 0, connPoolStats.InUse, "the pool was not released")
+			assert.Equal(t, 0, connPoolStats.WaitCount)
+		})
+	}
+
+}
+
+//the pool will release idle connection if limit
+func TestNumberOfIdleConnections(t *testing.T) {
+	t.Parallel()
+
+	// create pool
+	function := 5
+	pm := cpool.NewPoolFacade("mysql", function, idleTimeout)
+
+	defer pm.Close()
+
+	var wg sync.WaitGroup
+	// parallel requests
+	for i := 0; i < function; i++ {
+		wg.Add(1)
+
+		go execSleepWait(2, credentials[i], &wg, pm)
+	}
+
+	// wait
+	wg.Wait()
+	time.Sleep(time.Second * 5)
+	// check open connections
+	stats := pm.Stats()
+	assert.Equal(t, function, stats.NumUniqueDSNs)
+	assert.Equal(t, function, stats.TotalMax)
+	assert.Equal(t, function, stats.NumOpen)
+	assert.Equal(t, function, stats.NumIdle)
+}
+
+func TestReleaseIdleConnectionIfLimitExeeded(t *testing.T) {
+	t.Parallel()
+
+	// create pool
+	function := 5
+	oneExecDurationSec := 2
+	expectedTotalDurationSec := 2 * oneExecDurationSec
+	pm := cpool.NewPoolFacade("mysql", function, idleTimeout)
+
+	defer pm.Close()
+
+	var wg sync.WaitGroup
+
+	// parallel requests
+	for i := 0; i < function+1; i++ {
+		wg.Add(1)
+		go execSleepWait(oneExecDurationSec, user4Db2Credentials, &wg, pm)
+	}
+
+	start := time.Now()
+	// wait
+
+	if waitTimeout(&wg, time.Second*10) {
+		assert.Fail(t, "To long query execution. Probably pool doesn't support lifetime exeed")
+	}
+
+	duration := time.Since(start)
+
+	dirationIs4Sec := math.Round(duration.Seconds())
+	assert.Equal(t, expectedTotalDurationSec, dirationIs4Sec)
+
+	// check open connections
+	stats := pm.Stats()
+	assert.Equal(t, function, stats.NumIdle)
+}
 
 // the pool will release idle connection if limit
 func TestConnectionLifetimeExeeded(t *testing.T) {
@@ -281,14 +345,61 @@ func TestCreatePoolWithDifferentConnectionLimits(t *testing.T) {
 }
 
 // TODO run query on database
+//execSleepWait делает запрос в бд. Длительность выполнения равна delaySec секунд
+func execSleepWait(delaySec int, credentials cpool.Credentials, wg *sync.WaitGroup, pm *cpool.PoolFacade) {
+	execSleep(delaySec, credentials, pm)
+	wg.Done()
+}
+
+// TODO run query on database
 //execSleep делает запрос в бд. Длительность выполнения равна delaySec секунд
-func execSleep(delaySec int, credentials cpool.Credentials, wg *sync.WaitGroup, pm *cpool.PoolFacade) {
-	_, err := pm.Exec(credentials, "select sleep("+strconv.Itoa(delaySec)+")")
+func execSleep(delaySec int, credentials cpool.Credentials, pm *cpool.PoolFacade) {
+	_, err := pm.Exec(credentials, fmt.Sprintf("select sleep(%v)", delaySec))
+	if err != nil {
+		panic(err)
+	}
+}
+
+// TODO run query on database
+//querySleepWait делает запрос в бд. Длительность выполнения равна delaySec секунд
+func querySleepWait(delaySec int, credentials cpool.Credentials, wg *sync.WaitGroup, poolFacade *cpool.PoolFacade) {
+	querySleep(delaySec, credentials, poolFacade)
+	wg.Done()
+}
+
+// TODO run query on database
+//querySleep делает запрос в бд. Длительность выполнения равна delaySec секунд
+func querySleep(delaySec int, credentials cpool.Credentials, pm *cpool.PoolFacade) {
+	rows, err := pm.Query(credentials, fmt.Sprintf("select sleep(%v)", delaySec))
+	if err != nil {
+		panic(err)
+	}
+	errCloseRows := rows.Close()
+	if errCloseRows != nil {
+		panic(errCloseRows)
+	}
+}
+
+// TODO run query on database
+//querySleepWait делает запрос в бд. Длительность выполнения равна delaySec секунд
+func queryRowSleepWait(delaySec int, credentials cpool.Credentials, wg *sync.WaitGroup, poolFacade *cpool.PoolFacade) {
+	queryRowSleep(delaySec, credentials, poolFacade)
+	wg.Done()
+}
+
+// TODO run query on database
+//querySleepWait делает запрос в бд. Длительность выполнения равна delaySec секунд
+func queryRowSleep(delaySec int, credentials cpool.Credentials, pm *cpool.PoolFacade) {
+	row, err := pm.QueryRow(credentials, fmt.Sprintf("select sleep(%v)", delaySec))
 	if err != nil {
 		panic(err)
 	}
 
-	wg.Done()
+	var num int
+	errScan := row.Scan(&num)
+	if errScan != nil {
+		panic(errScan)
+	}
 }
 
 // waitTimeout waits for the waitgroup for the specified max timeout.

@@ -31,6 +31,7 @@ type driverConn struct {
 	dbmuClosed bool      // same as closed, but guarded by connPool.mu, for removeClosedStmtLocked
 }
 
+//TODO изучить когда вызывается
 func (dc *driverConn) releaseConn(err error) {
 	dc.connPool.putConn(dc, err, true)
 }
@@ -156,9 +157,9 @@ func (dc *driverConn) finalClose() error {
 
 	dc.connPool.mu.Lock()
 	//dc.connPool.numOpen--
-	dc.connPool.poolFacade.decrementNumOpenedLocked()
+	dc.connPool.poolFacade.decrementNumOpened()
 	//TODO попытка открыть новые соединения
-	dc.connPool.poolFacade.maybeOpenNewConnectionsLocked()
+	dc.connPool.poolFacade.maybeOpenNewConnections()
 	dc.connPool.mu.Unlock()
 
 	atomic.AddUint64(&dc.connPool.numClosed, 1)

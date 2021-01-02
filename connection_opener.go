@@ -6,7 +6,7 @@ import (
 
 //TODO создаёт новое соединение в контексте без проверок ограничений
 // копия connectionOpener
-func (pf *PoolFacade) globalConnectionOpener(ctx context.Context) {
+func (pf *PoolFacade) connectionOpener(ctx context.Context) {
 	//ждём пока контекст закроется или попросят открыть новое соединение
 	for {
 		select {
@@ -21,7 +21,7 @@ func (pf *PoolFacade) globalConnectionOpener(ctx context.Context) {
 //TODO метод создаёт новое соединение/ вызывается из connectionOpener горутины
 // Open one new connection
 func (connPool *ConnPool) openNewConnection(ctx context.Context) {
-	// maybeOpenNewConnectionsLocked has already executed connPool.numOpen++ before it sent
+	// maybeOpenNewConnections has already executed connPool.numOpen++ before it sent
 	// on connPool.openerCh. This function must execute connPool.numOpen-- if the
 	// connection fails or is closed before returning.
 	ci, err := connPool.connector.Connect(ctx)
@@ -32,15 +32,15 @@ func (connPool *ConnPool) openNewConnection(ctx context.Context) {
 			ci.Close()
 		}
 		//connPool.numOpen--
-		connPool.poolFacade.decrementNumOpenedLocked()
+		connPool.poolFacade.decrementNumOpened()
 		return
 	}
 	if err != nil {
 		//connPool.numOpen--
-		connPool.poolFacade.decrementNumOpenedLocked()
+		connPool.poolFacade.decrementNumOpened()
 		connPool.putConnectionConnPoolLocked(nil, err)
 		//TODO странно / попытка открыть новые соединения
-		connPool.poolFacade.maybeOpenNewConnectionsLocked()
+		connPool.poolFacade.maybeOpenNewConnections()
 		return
 	}
 	dc := &driverConn{
@@ -53,7 +53,7 @@ func (connPool *ConnPool) openNewConnection(ctx context.Context) {
 		connPool.addDepLocked(dc, dc)
 	} else {
 		//connPool.numOpen--
-		connPool.poolFacade.decrementNumOpenedLocked()
+		connPool.poolFacade.decrementNumOpened()
 		ci.Close()
 	}
 }
@@ -66,15 +66,15 @@ func (pf *PoolFacade) nextRequestKeyLocked() uint64 {
 	return next
 }
 
-//TODO проблема с мьютексами
-// Вызывается запросе нового канала/сохранения канала в список свободных/закрытии канала из sql.go
+// Вызывается при запросе нового канала/сохранения канала в список свободных/закрытии соединения
 // Assumes poolFacade.mu is locked.
 // If there are connRequests and the connection limit hasn't been reached,
 // then tell the connectionOpener to open new connections.
-func (pf *PoolFacade) maybeOpenNewConnectionsLocked() {
+func (pf *PoolFacade) maybeOpenNewConnections() {
 	pf.mu.Lock()
 	numRequests := len(pf.connRequests)
 
+	//Существует ограничение
 	if pf.totalMax > 0 {
 		numCanOpen := pf.totalMax - pf.numOpen
 		if numCanOpen < numRequests {

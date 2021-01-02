@@ -151,6 +151,7 @@ func (c *Conn) BeginTx(ctx context.Context, opts *TxOptions) (*Tx, error) {
 	return c.db.beginDC(ctx, dc, release, opts)
 }
 
+//TODO изучить когда вызывается
 // closemuRUnlockCondReleaseConn read unlocks closemu
 // as the sql operation is done with the dc.
 func (c *Conn) closemuRUnlockCondReleaseConn(err error) {
@@ -164,6 +165,7 @@ func (c *Conn) txCtx() context.Context {
 	return nil
 }
 
+//TODO изучить когда вызывается
 func (c *Conn) close(err error) error {
 	if !atomic.CompareAndSwapInt32(&c.done, 0, 1) {
 		return ErrConnDone

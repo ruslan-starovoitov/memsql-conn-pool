@@ -53,6 +53,9 @@ func main() {
 	reader := reader{}
 	wg := sync.WaitGroup{}
 
+	wg.Add(1)
+	reader.Read(credentials[0], connPool, &wg)
+
 	// seeder := seeder{}
 	// log.Print("start writing")
 	// for _, cr := range credentials {
@@ -60,15 +63,15 @@ func main() {
 	// 	seeder.Seed(cr, connPool,  &wg)
 	// }
 
-	// wg.Wait()
-
-	log.Print("start reading")
-	for _, cr := range credentials {
-		wg.Add(1)
-		go reader.Read(cr, connPool, &wg)
-	}
-
-	log.Print("wait")
 	wg.Wait()
+
+	//log.Print("start reading")
+	//for _, cr := range credentials {
+	//	wg.Add(1)
+	//	go reader.Read(cr, connPool, &wg)
+	//}
+	//
+	//log.Print("wait")
+	//wg.Wait()
 	log.Print("the end")
 }

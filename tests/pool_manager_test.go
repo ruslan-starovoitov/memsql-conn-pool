@@ -1,9 +1,8 @@
 package cpool_tests
 
 import (
-	cpool "cpool"
+	"cpool"
 	_ "cpool/mysql"
-	"fmt"
 	"log"
 	"math"
 	"sync"
@@ -151,14 +150,14 @@ func TestConnectionReuseInSequentialRequests(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		function func(delay int, cr cpool.Credentials, facade *cpool.PoolFacade)
+		function func(delay time.Duration, cr cpool.Credentials, facade *cpool.PoolFacade)
 	}{
 		{"exec", execSleep},
 		{"query", querySleep},
 		{"queryRow", queryRowSleep},
-		{"exec and query", func(delaySec int, cr cpool.Credentials, pf *cpool.PoolFacade) {
-			execSleep(delaySec, cr, pf)
-			querySleep(delaySec, cr, pf)
+		{"exec and query", func(delay time.Duration, cr cpool.Credentials, pf *cpool.PoolFacade) {
+			execSleep(delay, cr, pf)
+			querySleep(delay, cr, pf)
 		}},
 	}
 	const connectionLimit = 100
@@ -183,6 +182,7 @@ func TestConnectionReuseInSequentialRequests(t *testing.T) {
 			assert.Equal(t, 0, stats.NumOpen, "num open")
 		})
 	}
+	log.Print("log ended")
 }
 
 //проверка правильной статистики с одним соединением
@@ -191,12 +191,12 @@ func TestStatsOneConnectionExec(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		function func(delay int, cr cpool.Credentials, group *sync.WaitGroup, facade *cpool.PoolFacade)
+		function func(delay time.Duration, cr cpool.Credentials, group *sync.WaitGroup, facade *cpool.PoolFacade)
 	}{
 		{"exec", execSleepWait},
 		{"query", querySleepWait},
 		{"queryRow", queryRowSleepWait},
-		{"exec and query", func(delay int, cr cpool.Credentials, wg *sync.WaitGroup, pf *cpool.PoolFacade) {
+		{"exec and query", func(delay time.Duration, cr cpool.Credentials, wg *sync.WaitGroup, pf *cpool.PoolFacade) {
 			execSleepWait(delay, cr, wg, pf)
 			querySleepWait(delay, cr, wg, pf)
 		}},
@@ -233,19 +233,19 @@ func TestStatsOneConnectionExec(t *testing.T) {
 
 }
 
-//the pool will release idle connection if limit
+//the pool will release idle connection if limit is exceeded
 func TestNumberOfIdleConnections(t *testing.T) {
 	t.Parallel()
 
 	// create pool
-	function := 5
-	pm := cpool.NewPoolFacade("mysql", function, idleTimeout)
+	connectionLimit := 5
+	pm := cpool.NewPoolFacade("mysql", connectionLimit, idleTimeout)
 
 	defer pm.Close()
 
 	var wg sync.WaitGroup
 	// parallel requests
-	for i := 0; i < function; i++ {
+	for i := 0; i < connectionLimit; i++ {
 		wg.Add(1)
 
 		go execSleepWait(2, credentials[i], &wg, pm)
@@ -256,29 +256,28 @@ func TestNumberOfIdleConnections(t *testing.T) {
 	time.Sleep(time.Second * 5)
 	// check open connections
 	stats := pm.Stats()
-	assert.Equal(t, function, stats.NumUniqueDSNs)
-	assert.Equal(t, function, stats.TotalMax)
-	assert.Equal(t, function, stats.NumOpen)
-	assert.Equal(t, function, stats.NumIdle)
+	assert.Equal(t, connectionLimit, stats.NumUniqueDSNs)
+	assert.Equal(t, connectionLimit, stats.TotalMax)
+	assert.Equal(t, connectionLimit, stats.NumOpen)
+	assert.Equal(t, connectionLimit, stats.NumIdle)
 }
 
-func TestReleaseIdleConnectionIfLimitExeeded(t *testing.T) {
+func TestReleaseIdleConnectionIfLimitExceeded(t *testing.T) {
 	t.Parallel()
 
 	// create pool
-	function := 5
-	oneExecDurationSec := 2
-	expectedTotalDurationSec := 2 * oneExecDurationSec
-	pm := cpool.NewPoolFacade("mysql", function, idleTimeout)
-
+	connectionLimit := 5
+	oneExecDuration := 2 * time.Second
+	expectedTotalDuration := 2 * oneExecDuration
+	pm := cpool.NewPoolFacade("mysql", connectionLimit, idleTimeout)
 	defer pm.Close()
 
 	var wg sync.WaitGroup
 
 	// parallel requests
-	for i := 0; i < function+1; i++ {
+	for i := 0; i < connectionLimit+1; i++ {
 		wg.Add(1)
-		go execSleepWait(oneExecDurationSec, user4Db2Credentials, &wg, pm)
+		go execSleepWait(oneExecDuration, user4Db2Credentials, &wg, pm)
 	}
 
 	start := time.Now()
@@ -290,20 +289,22 @@ func TestReleaseIdleConnectionIfLimitExeeded(t *testing.T) {
 
 	duration := time.Since(start)
 
-	dirationIs4Sec := math.Round(duration.Seconds())
-	assert.Equal(t, expectedTotalDurationSec, dirationIs4Sec)
+	durationSec := math.Round(duration.Seconds())
+
+	//assert.WithinDuration(t, time.Now(), sta)
+	assert.Equal(t, expectedTotalDuration, durationSec)
 
 	// check open connections
 	stats := pm.Stats()
-	assert.Equal(t, function, stats.NumIdle)
+	assert.Equal(t, connectionLimit, stats.NumIdle)
 }
 
 // the pool will release idle connection if limit
-func TestConnectionLifetimeExeeded(t *testing.T) {
+func TestConnectionLifetimeExceeded(t *testing.T) {
 	t.Parallel()
 
 	// create pool
-	pm := cpool.NewPoolFacade("mysql", 1, time.Millisecond)
+	pm := cpool.NewPoolFacade("mysql", 1, time.Second)
 	defer pm.Close()
 
 	// exec
@@ -311,13 +312,34 @@ func TestConnectionLifetimeExeeded(t *testing.T) {
 	assert.NoError(t, err)
 
 	// sleep for delete idle connection
-	time.Sleep(time.Second)
+	time.Sleep(2 * time.Second)
 
 	// check that connection killed
 	stats := pm.Stats()
 	assert.Equal(t, 0, stats.NumIdle)
 	assert.Equal(t, 0, stats.NumOpen)
 	assert.Equal(t, 1, stats.TotalMax)
+}
+
+// the pool will not release idle connection if limit
+func TestConnectionLifetimeNotExceeded(t *testing.T) {
+	t.Parallel()
+
+	// create pool
+	pm := cpool.NewPoolFacade("mysql", 1, time.Second)
+	defer pm.Close()
+
+	// exec
+	execSleep(1, user5Db2Credentials, pm)
+
+	// no sleep
+	//time.Sleep(2*time.Second)
+
+	// check that connection killed
+	stats := pm.Stats()
+	assert.Equal(t, 1, stats.NumIdle, "num idle")
+	assert.Equal(t, 1, stats.NumOpen, "num open")
+	assert.Equal(t, 1, stats.TotalMax, "total max")
 }
 
 func TestCreatePoolWithDifferentConnectionLimits(t *testing.T) {
@@ -341,83 +363,5 @@ func TestCreatePoolWithDifferentConnectionLimits(t *testing.T) {
 
 			_ = cpool.NewPoolFacade("mysql", testCase.connectionLimit, time.Second)
 		})
-	}
-}
-
-// TODO run query on database
-//execSleepWait делает запрос в бд. Длительность выполнения равна delaySec секунд
-func execSleepWait(delaySec int, credentials cpool.Credentials, wg *sync.WaitGroup, pm *cpool.PoolFacade) {
-	execSleep(delaySec, credentials, pm)
-	wg.Done()
-}
-
-// TODO run query on database
-//execSleep делает запрос в бд. Длительность выполнения равна delaySec секунд
-func execSleep(delaySec int, credentials cpool.Credentials, pm *cpool.PoolFacade) {
-	_, err := pm.Exec(credentials, fmt.Sprintf("select sleep(%v)", delaySec))
-	if err != nil {
-		panic(err)
-	}
-}
-
-// TODO run query on database
-//querySleepWait делает запрос в бд. Длительность выполнения равна delaySec секунд
-func querySleepWait(delaySec int, credentials cpool.Credentials, wg *sync.WaitGroup, poolFacade *cpool.PoolFacade) {
-	querySleep(delaySec, credentials, poolFacade)
-	wg.Done()
-}
-
-// TODO run query on database
-//querySleep делает запрос в бд. Длительность выполнения равна delaySec секунд
-func querySleep(delaySec int, credentials cpool.Credentials, pm *cpool.PoolFacade) {
-	rows, err := pm.Query(credentials, fmt.Sprintf("select sleep(%v)", delaySec))
-	if err != nil {
-		panic(err)
-	}
-	errCloseRows := rows.Close()
-	if errCloseRows != nil {
-		panic(errCloseRows)
-	}
-}
-
-// TODO run query on database
-//querySleepWait делает запрос в бд. Длительность выполнения равна delaySec секунд
-func queryRowSleepWait(delaySec int, credentials cpool.Credentials, wg *sync.WaitGroup, poolFacade *cpool.PoolFacade) {
-	queryRowSleep(delaySec, credentials, poolFacade)
-	wg.Done()
-}
-
-// TODO run query on database
-//querySleepWait делает запрос в бд. Длительность выполнения равна delaySec секунд
-func queryRowSleep(delaySec int, credentials cpool.Credentials, pm *cpool.PoolFacade) {
-	row, err := pm.QueryRow(credentials, fmt.Sprintf("select sleep(%v)", delaySec))
-	if err != nil {
-		panic(err)
-	}
-
-	var num int
-	errScan := row.Scan(&num)
-	if errScan != nil {
-		panic(errScan)
-	}
-}
-
-// waitTimeout waits for the waitgroup for the specified max timeout.
-// Returns true if waiting timed out.
-func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
-	c := make(chan struct{})
-
-	fun := func() {
-		defer close(c)
-		wg.Wait()
-	}
-
-	go fun()
-
-	select {
-	case <-c:
-		return false // completed normally
-	case <-time.After(timeout):
-		return true // timed out
 	}
 }

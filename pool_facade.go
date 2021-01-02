@@ -9,12 +9,16 @@ import (
 	cmap "github.com/orcaman/concurrent-map"
 )
 
+// driverConn wraps a driver.Conn with a mutex, to
+// be held during all calls into the Conn. (including any calls onto
+// interfaces returned via that Conn, such as calls on Tx, Stmt,
 //PoolFacade содержит хеш-таблицу пулов соединений. Он содержит
 //общие ограничения на количество соединений
 type PoolFacade struct {
 	driverName string //mysql
-	pools      cmap.ConcurrentMap
-	ctx        context.Context
+
+	pools cmap.ConcurrentMap //содержит ссылки на ConnPool
+	ctx   context.Context
 
 	totalMax int // <= 0 means unlimited
 	//numIdle   int
@@ -33,21 +37,31 @@ type PoolFacade struct {
 }
 
 //NewPoolFacade создаёт новый пул соединений
+//если connectionLimit меньше или равен нулю, то ограничения нет
 // если idleTimeout будет установлен меньше, чем одна секунда, то он автоматически будет заменен на одну секунду
 func NewPoolFacade(driverName string, connectionLimit int, idleTimeout time.Duration) *PoolFacade {
+	if _, ok := drivers[driverName]; !ok {
+		panic("Unexpected driver name. Please register driver.")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
 	poolFacade := PoolFacade{
+		driverName:   driverName,
 		pools:        cmap.New(),
+		ctx:          ctx,
 		totalMax:     connectionLimit,
 		idleTimeout:  idleTimeout,
+		cancel:       cancel,
+		closed:       false,
+		mu:           sync.Mutex{},
 		connRequests: make(map[uint64]connRequest),
-		driverName:   driverName,
+		nextRequest:  0,
+		//TODO magic number
+		openerChannel: make(chan *ConnPool, 1000),
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	poolFacade.ctx = ctx
-	poolFacade.cancel = cancel
 
 	//TODO запуск создания новых соединений
-	go poolFacade.globalConnectionOpener(ctx)
+	go poolFacade.connectionOpener(ctx)
 	return &poolFacade
 }
 
@@ -130,12 +144,12 @@ func (pf *PoolFacade) Close() {
 	pf.cancel()
 }
 
-var errpoolFacadeClosed = errors.New("pools manager closed")
+var errPoolFacadeClosed = errors.New("pools manager closed")
 
 //getOrCreateConnPool создаёт новый пустой пул для нового data source name если его нет
 func (pf *PoolFacade) getOrCreateConnPool(credentials Credentials) (*ConnPool, error) {
 	if pf.closed {
-		return nil, errpoolFacadeClosed
+		return nil, errPoolFacadeClosed
 	}
 	//Create pool if not exists
 	if !pf.pools.Has(credentials.GetId()) {
@@ -143,7 +157,7 @@ func (pf *PoolFacade) getOrCreateConnPool(credentials Credentials) (*ConnPool, e
 		//TODO заменить название драйвера
 		//TODO это плохо что общая библиотека зависит от mysql
 		//нужно, чтобы название драйвера устанавливалось при инициализации пула
-		connPool, err := Open("mysql", dsn)
+		connPool, err := Open(pf.driverName, dsn)
 		if err != nil {
 			return nil, err
 		}
@@ -163,4 +177,8 @@ func (pf *PoolFacade) getOrCreateConnPool(credentials Credentials) (*ConnPool, e
 //TODO возможно нужен мьютекс
 func (pf *PoolFacade) isOpenConnectionLimitExceeded() bool {
 	return pf.totalMax <= pf.numOpen
+}
+
+func (pf *PoolFacade) isLimitExists() bool {
+	return 0 < pf.totalMax
 }

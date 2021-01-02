@@ -5,13 +5,13 @@ import (
 	"strconv"
 )
 
-func (pf *PoolFacade) incrementNumOpenedLocked() {
+func (pf *PoolFacade) incrementNumOpened() {
 	pf.mu.Lock()
 	pf.numOpen++
 	pf.mu.Unlock()
 }
 
-func (pf *PoolFacade) decrementNumOpenedLocked() {
+func (pf *PoolFacade) decrementNumOpened() {
 	pf.mu.Lock()
 	pf.numOpen--
 	pf.mu.Unlock()

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"sync"
 )
 
@@ -209,6 +210,37 @@ func (rs *Rows) ColumnTypes() ([]*ColumnType, error) {
 	defer rs.dc.Unlock()
 
 	return rowsColumnInfoSetupConnLocked(rs.rowsi), nil
+}
+
+func rowsColumnInfoSetupConnLocked(rowsi driver.Rows) []*ColumnType {
+	names := rowsi.Columns()
+
+	list := make([]*ColumnType, len(names))
+	for i := range list {
+		ci := &ColumnType{
+			name: names[i],
+		}
+		list[i] = ci
+
+		if prop, ok := rowsi.(driver.RowsColumnTypeScanType); ok {
+			ci.scanType = prop.ColumnTypeScanType(i)
+		} else {
+			ci.scanType = reflect.TypeOf(new(interface{})).Elem()
+		}
+		if prop, ok := rowsi.(driver.RowsColumnTypeDatabaseTypeName); ok {
+			ci.databaseType = prop.ColumnTypeDatabaseTypeName(i)
+		}
+		if prop, ok := rowsi.(driver.RowsColumnTypeLength); ok {
+			ci.length, ci.hasLength = prop.ColumnTypeLength(i)
+		}
+		if prop, ok := rowsi.(driver.RowsColumnTypeNullable); ok {
+			ci.nullable, ci.hasNullable = prop.ColumnTypeNullable(i)
+		}
+		if prop, ok := rowsi.(driver.RowsColumnTypePrecisionScale); ok {
+			ci.precision, ci.scale, ci.hasPrecisionScale = prop.ColumnTypePrecisionScale(i)
+		}
+	}
+	return list
 }
 
 // Scan copies the columns in the current row into the values pointed

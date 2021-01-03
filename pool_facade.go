@@ -3,6 +3,7 @@ package cpool
 import (
 	"context"
 	"errors"
+	lru "github.com/hashicorp/golang-lru"
 	"sync"
 	"time"
 
@@ -30,10 +31,13 @@ type PoolFacade struct {
 
 	closed bool
 
-	mu            sync.Mutex             // protects following fields
-	connRequests  map[uint64]connRequest //для запросов на создание новых соединений
-	nextRequest   uint64                 // Next key to use in connRequests.
-	openerChannel chan *ConnPool
+	mu           sync.Mutex             // protects following fields
+	connRequests map[uint64]connRequest //для запросов на создание новых соединений
+	nextRequest  uint64                 // Next key to use in connRequests.
+
+	//openerChannel chan *ConnPool
+
+	lruCache *lru.Cache
 }
 
 //NewPoolFacade создаёт новый пул соединений
@@ -42,6 +46,12 @@ type PoolFacade struct {
 func NewPoolFacade(driverName string, connectionLimit int, idleTimeout time.Duration) *PoolFacade {
 	if _, ok := drivers[driverName]; !ok {
 		panic("Unexpected driver name. Please register driver.")
+	}
+
+	//TODO Lru упадет, если передать аргумент меньше единицы
+	lruCache, err := lru.New(connectionLimit)
+	if err != nil {
+		panic(err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -56,8 +66,8 @@ func NewPoolFacade(driverName string, connectionLimit int, idleTimeout time.Dura
 		mu:           sync.Mutex{},
 		connRequests: make(map[uint64]connRequest),
 		nextRequest:  0,
-		//TODO magic number
-		openerChannel: make(chan *ConnPool, 1000),
+		lruCache:     lruCache,
+		//openerChannel:
 	}
 
 	//TODO запуск создания новых соединений

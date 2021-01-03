@@ -38,6 +38,8 @@ func (connPool *ConnPool) openNewConnection(ctx context.Context) {
 	if err != nil {
 		//connPool.numOpen--
 		connPool.poolFacade.decrementNumOpened()
+		//TODO что это за ужас?
+		// какого черта вызывается с nil?
 		connPool.putConnectionConnPoolLocked(nil, err)
 		//TODO странно / попытка открыть новые соединения
 		connPool.poolFacade.maybeOpenNewConnections()

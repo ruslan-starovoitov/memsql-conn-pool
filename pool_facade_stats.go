@@ -28,22 +28,10 @@ func (pf *PoolFacade) Stats() PoolFacadeStats {
 		index++
 		connPool := tuple.Val.(*ConnPool)
 		connPool.mu.Lock()
-		//TODO это чудо равно нулю
-		if connPool.freeConn == nil {
-			log.Print(".freeConn is nil")
-		} else {
-			log.Print(".freeConn is not nil")
-		}
+
 		numIdle += len(connPool.freeConn)
 		connPool.mu.Unlock()
-		log.Print("Num idle " + strconv.Itoa(numIdle))
-	}
 
-	log.Print("Num idle " + strconv.Itoa(numIdle))
-	if index == 0 {
-		log.Print("Pools is empty")
-	} else {
-		log.Print("Pools is not empty " + strconv.Itoa(index) + " calls")
 	}
 
 	result := PoolFacadeStats{

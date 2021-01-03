@@ -55,22 +55,24 @@ func queryRowSleep(delay time.Duration, credentials cpool.Credentials, pm *cpool
 	}
 }
 
-// waitTimeout waits for the waitgroup for the specified max timeout.
-// Returns true if waiting timed out.
-func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
+// waitTimeout ждет выполнения wait group. Если выполнения заняло меньше timeout, то вернет true
+// Если выполнение не закончилось за timeout, то вернет false
+func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) (ok bool, duration time.Duration) {
 	c := make(chan struct{})
-
-	fun := func() {
+	function := func() {
 		defer close(c)
 		wg.Wait()
 	}
+	go function()
 
-	go fun()
+	startTime := time.Now()
 
 	select {
+	// completed normally
 	case <-c:
-		return false // completed normally
+		return true, time.Since(startTime)
+		// timed out
 	case <-time.After(timeout):
-		return true // timed out
+		return false, time.Since(startTime)
 	}
 }

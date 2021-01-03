@@ -4,7 +4,6 @@ import (
 	"cpool"
 	_ "cpool/mysql"
 	"log"
-	"math"
 	"sync"
 	"testing"
 	"time"
@@ -18,37 +17,31 @@ var user1Db1Credentials = cpool.Credentials{
 	Password: "pass1",
 	Database: "hellomemsql1",
 }
-
 var user2Db1Credentials = cpool.Credentials{
 	Username: "user2",
 	Password: "pass2",
 	Database: "hellomemsql1",
 }
-
 var user3Db1Credentials = cpool.Credentials{
 	Username: "user3",
 	Password: "pass3",
 	Database: "hellomemsql1",
 }
-
 var user4Db2Credentials = cpool.Credentials{
 	Username: "user4",
 	Password: "pass4",
 	Database: "hellomemsql2",
 }
-
 var user5Db2Credentials = cpool.Credentials{
 	Username: "user5",
 	Password: "pass5",
 	Database: "hellomemsql2",
 }
-
 var user6Db2Credentials = cpool.Credentials{
 	Username: "user6",
 	Password: "pass6",
 	Database: "hellomemsql2",
 }
-
 var credentials = []cpool.Credentials{
 	user1Db1Credentials,
 	user2Db1Credentials,
@@ -265,34 +258,83 @@ func TestNumberOfIdleConnections(t *testing.T) {
 func TestReleaseIdleConnectionIfLimitExceeded(t *testing.T) {
 	t.Parallel()
 
-	// create pool
-	connectionLimit := 5
-	oneExecDuration := 2 * time.Second
-	expectedTotalDuration := 2 * oneExecDuration
-	pm := cpool.NewPoolFacade("mysql", connectionLimit, idleTimeout)
+	// create pool with long idle timeout
+	var wg sync.WaitGroup
+	connectionLimit := 2
+	pm := cpool.NewPoolFacade("mysql", connectionLimit, 5*time.Minute)
 	defer pm.Close()
 
-	var wg sync.WaitGroup
+	queryExecutionDuration := 2 * time.Second
+	//четверть секунды на накладные расходы на передачу данных по сети и работу БД
+	queryTimeoutDuration := queryExecutionDuration + time.Second/4
 
-	// parallel requests
-	for i := 0; i < connectionLimit+1; i++ {
+	//заполнить пул запросами
+	//make connectionLimit queries
+	for i := 0; i < connectionLimit; i++ {
 		wg.Add(1)
-		go execSleepWait(oneExecDuration, user4Db2Credentials, &wg, pm)
+		go execSleepWait(queryExecutionDuration, user4Db2Credentials, &wg, pm)
 	}
 
-	start := time.Now()
-	// wait
-
-	if waitTimeout(&wg, time.Second*10) {
-		assert.Fail(t, "To long query execution. Probably pool doesn't support lifetime exeed")
+	//wait for their execution
+	ok, duration := waitTimeout(&wg, queryTimeoutDuration)
+	if !ok {
+		assert.Fail(t, "To long query execution.")
+	} else {
+		log.Printf("first duration is %v\n", duration.Seconds())
 	}
 
-	duration := time.Since(start)
+	stats := pm.Stats()
+	assert.Equal(t, connectionLimit, stats.NumIdle)
+	assert.Equal(t, connectionLimit, stats.NumOpen)
 
-	durationSec := math.Round(duration.Seconds())
+	//make another query with different credentials
+	wg.Add(1)
+	go execSleepWait(queryExecutionDuration, user1Db1Credentials, &wg, pm)
 
-	//assert.WithinDuration(t, time.Now(), sta)
-	assert.Equal(t, expectedTotalDuration, durationSec)
+	//wait for new query
+	ok, duration = waitTimeout(&wg, queryTimeoutDuration)
+	if !ok {
+		assert.Fail(t, "To long query execution. Probably pool doesn't support killing idle connections")
+	} else {
+		log.Printf("second duration is %v\n", duration.Seconds())
+	}
+
+	// check open connections
+	stats = pm.Stats()
+	assert.Equal(t, connectionLimit, stats.NumIdle)
+}
+
+func TestExceedingConnectionLimit(t *testing.T) {
+	t.Parallel()
+
+	// create pool with long idle timeout
+	var wg sync.WaitGroup
+	connectionLimit := 5
+	pm := cpool.NewPoolFacade("mysql", connectionLimit, 5*time.Minute)
+	defer pm.Close()
+
+	queryExecutionDuration := 2 * time.Second
+	//четверть секунды на накладные расходы на передачу данных по сети и работу БД
+	//queryTimeoutDuration := queryExecutionDuration + time.Second/4
+
+	//заполнить пул запросами
+	//make connectionLimit*2 queries
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go execSleepWait(queryExecutionDuration, user4Db2Credentials, &wg, pm)
+	}
+
+	//wait for their execution
+	startTime := time.Now()
+	wg.Wait()
+	duration := time.Since(startTime)
+	log.Printf("duration is %v\n", duration.Seconds())
+	//ok, duration:= waitTimeout(&wg, queryTimeoutDuration*2)
+	//if !ok {
+	//	assert.Failf(t, "To long query execution.",	"Duration is %v seconds.", duration.Seconds())
+	//}else{
+	//	log.Printf("duration is %v\n", duration.Seconds())
+	//}
 
 	// check open connections
 	stats := pm.Stats()

@@ -39,7 +39,7 @@ type ConnPool struct {
 	//connRequests map[uint64]chan connCreationResponse
 	//nextRequest  uint64 // Next key to use in connRequests.
 	//TODO numInUse + numIdle
-	//numOpen int // number of opened and pending open connections
+	numOpen int // number of opened and pending open connections
 	// Used to signal the need for new connections
 	// a goroutine running connectionOpener() reads on this chan and
 	// maybeOpenNewConnections sends on the chan (one send per needed connection)

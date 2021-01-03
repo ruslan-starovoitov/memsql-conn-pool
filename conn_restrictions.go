@@ -1,5 +1,7 @@
 package cpool
 
+import "time"
+
 //TODO больше не нужно
 //// SetMaxIdleConns sets the maximum number of connections in the idle
 //// connection pool.
@@ -81,25 +83,26 @@ package cpool
 //	connPool.mu.Unlock()
 //}
 //
-//// SetConnMaxIdleTime sets the maximum amount of time a connection may be idle.
-////
-//// Expired connections may be closed lazily before reuse.
-////
-//// If d <= 0, connections are not closed due to a connection's idle time.
-//func (connPool *ConnPool) SetConnMaxIdleTime(d time.Duration) {
-//	if d < 0 {
-//		d = 0
-//	}
-//	connPool.mu.Lock()
-//	defer connPool.mu.Unlock()
+
+// SetConnMaxIdleTime sets the maximum amount of time a connection may be idle.
 //
-//	// Wake cleaner up when idle time is shortened.
-//	if d > 0 && d < connPool.maxIdleTime && connPool.cleanerCh != nil {
-//		select {
-//		case connPool.cleanerCh <- struct{}{}:
-//		default:
-//		}
-//	}
-//	connPool.maxIdleTime = d
-//	connPool.startCleanerLocked()
-//}
+// Expired connections may be closed lazily before reuse.
+//
+// If d <= 0, connections are not closed due to a connection's idle time.
+func (connPool *ConnPool) SetConnMaxIdleTime(d time.Duration) {
+	if d < 0 {
+		d = 0
+	}
+	connPool.mu.Lock()
+	defer connPool.mu.Unlock()
+
+	// Wake cleaner up when idle time is shortened.
+	if d > 0 && d < connPool.maxIdleTime && connPool.cleanerCh != nil {
+		select {
+		case connPool.cleanerCh <- struct{}{}:
+		default:
+		}
+	}
+	connPool.maxIdleTime = d
+	connPool.startCleanerLocked()
+}

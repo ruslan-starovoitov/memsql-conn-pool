@@ -35,7 +35,7 @@ type PoolFacade struct {
 	connRequests map[uint64]connRequest //для запросов на создание новых соединений
 	nextRequest  uint64                 // Next key to use in connRequests.
 
-	//openerChannel chan *ConnPool
+	openerChannel chan *ConnPool
 
 	lruCache *lru.Cache
 }
@@ -67,7 +67,8 @@ func NewPoolFacade(driverName string, connectionLimit int, idleTimeout time.Dura
 		connRequests: make(map[uint64]connRequest),
 		nextRequest:  0,
 		lruCache:     lruCache,
-		//openerChannel:
+		//TODO magic number
+		openerChannel: make(chan *ConnPool, 1000),
 	}
 
 	//TODO запуск создания новых соединений

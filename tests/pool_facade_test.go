@@ -310,6 +310,7 @@ func TestExceedingConnectionLimit(t *testing.T) {
 	// create pool with long idle timeout
 	var wg sync.WaitGroup
 	connectionLimit := 5
+	parallelConnections := 10
 	pm := cpool.NewPoolFacade("mysql", connectionLimit, 5*time.Minute)
 	defer pm.Close()
 
@@ -318,8 +319,7 @@ func TestExceedingConnectionLimit(t *testing.T) {
 	//queryTimeoutDuration := queryExecutionDuration + time.Second/4
 
 	//заполнить пул запросами
-	//make connectionLimit*2 queries
-	for i := 0; i < 20; i++ {
+	for i := 0; i < parallelConnections; i++ {
 		wg.Add(1)
 		go execSleepWait(queryExecutionDuration, user4Db2Credentials, &wg, pm)
 	}

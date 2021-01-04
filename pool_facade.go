@@ -79,13 +79,13 @@ func NewPoolFacade(driverName string, connectionLimit int, idleTimeout time.Dura
 
 // Exec executes a query without returning any rows.
 // The args are for any placeholder parameters in the query.
-func (pf *PoolFacade) Exec(credentials Credentials, sql string) (Result, error) {
-	connPool, err := pf.getOrCreateConnPool(credentials)
+func (poolFacade *PoolFacade) Exec(credentials Credentials, sql string) (Result, error) {
+	connPool, err := poolFacade.getOrCreateConnPool(credentials)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := connPool.ExecContext(pf.ctx, sql)
+	result, err := connPool.ExecContext(poolFacade.ctx, sql)
 	if err != nil {
 		return nil, err
 	}
@@ -103,8 +103,8 @@ func (pf *PoolFacade) Exec(credentials Credentials, sql string) (Result, error) 
 // The provided TxOptions is optional and may be nil if defaults should be used.
 // If a non-default isolation level is used that the driver doesn't support,
 // an error will be returned.
-func (pf *PoolFacade) BeginTx(credentials Credentials) (*Tx, error) {
-	connPool, err := pf.getOrCreateConnPool(credentials)
+func (poolFacade *PoolFacade) BeginTx(credentials Credentials) (*Tx, error) {
+	connPool, err := poolFacade.getOrCreateConnPool(credentials)
 	if err != nil {
 		return nil, err
 	}
@@ -119,13 +119,13 @@ func (pf *PoolFacade) BeginTx(credentials Credentials) (*Tx, error) {
 
 // Query executes a query that returns rows, typically a SELECT.
 // The args are for any placeholder parameters in the query.
-func (pf *PoolFacade) Query(credentials Credentials, sql string) (*Rows, error) {
-	connPool, err := pf.getOrCreateConnPool(credentials)
+func (poolFacade *PoolFacade) Query(credentials Credentials, sql string) (*Rows, error) {
+	connPool, err := poolFacade.getOrCreateConnPool(credentials)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := connPool.QueryContext(pf.ctx, sql)
+	rows, err := connPool.QueryContext(poolFacade.ctx, sql)
 	if err != nil {
 		return nil, err
 	}
@@ -139,61 +139,68 @@ func (pf *PoolFacade) Query(credentials Credentials, sql string) (*Rows, error) 
 // If the query selects no rows, the *Row's Scan will return ErrNoRows.
 // Otherwise, the *Row's Scan scans the first selected row and discards
 // the rest.
-func (pf *PoolFacade) QueryRow(credentials Credentials, sql string) (*Row, error) {
-	connPool, err := pf.getOrCreateConnPool(credentials)
+func (poolFacade *PoolFacade) QueryRow(credentials Credentials, sql string) (*Row, error) {
+	connPool, err := poolFacade.getOrCreateConnPool(credentials)
 	if err != nil {
 		return nil, err
 	}
 
-	row := connPool.QueryRowContext(pf.ctx, sql)
+	row := connPool.QueryRowContext(poolFacade.ctx, sql)
 	return row, nil
 }
 
 //TODO нужно реализовать добавить ошибку
 //ClosePool закрывает все текущие соединения и блокирует открытие новых соединений
-func (pf *PoolFacade) Close() {
-	pf.closed = true
-	pf.cancel()
+func (poolFacade *PoolFacade) Close() {
+	poolFacade.closed = true
+	poolFacade.cancel()
 }
 
 var errPoolFacadeClosed = errors.New("pools manager closed")
 
 //getOrCreateConnPool создаёт новый пустой пул для нового data source name если его нет
-func (pf *PoolFacade) getOrCreateConnPool(credentials Credentials) (*ConnPool, error) {
-	if pf.closed {
+func (poolFacade *PoolFacade) getOrCreateConnPool(credentials Credentials) (*ConnPool, error) {
+	if poolFacade.closed {
 		return nil, errPoolFacadeClosed
 	}
 	//Create pool if not exists
-	if !pf.pools.Has(credentials.GetId()) {
+	if !poolFacade.pools.Has(credentials.GetId()) {
 		dsn := GetDataSourceName(credentials)
 		//TODO заменить название драйвера
 		//TODO это плохо что общая библиотека зависит от mysql
 		//нужно, чтобы название драйвера устанавливалось при инициализации пула
-		connPool, err := Open(pf.driverName, dsn)
+		connPool, err := Open(poolFacade.driverName, dsn)
 		if err != nil {
 			return nil, err
 		}
 		//TODO некрасиво
-		connPool.poolFacade = pf
-		connPool.SetConnMaxIdleTime(pf.idleTimeout)
-		pf.pools.Set(credentials.GetId(), connPool)
+		connPool.poolFacade = poolFacade
+		connPool.SetConnMaxIdleTime(poolFacade.idleTimeout)
+		poolFacade.pools.Set(credentials.GetId(), connPool)
 		return connPool, nil
 	}
 	//Return pool if exists
-	if tmp, ok := pf.pools.Get(credentials.GetId()); ok {
+	if tmp, ok := poolFacade.pools.Get(credentials.GetId()); ok {
 		return tmp.(*ConnPool), nil
 	}
 	return nil, unableToGetPool
 }
 
-func (pf *PoolFacade) isOpenConnectionLimitExceeded() bool {
-	pf.mu.Lock()
-	result := pf.totalMax <= pf.numOpen
-	log.Printf("PoolFacade isOpenConnectionLimitExceeded %v  %v  %v\n", result, pf.totalMax, pf.numOpen)
-	pf.mu.Unlock()
+func (poolFacade *PoolFacade) isOpenConnectionLimitExceeded() bool {
+	poolFacade.mu.Lock()
+	result := poolFacade.totalMax <= poolFacade.numOpen
+	log.Printf("PoolFacade isOpenConnectionLimitExceeded %v  %v  %v\n", result, poolFacade.totalMax, poolFacade.numOpen)
+	poolFacade.mu.Unlock()
 	return result
 }
 
-func (pf *PoolFacade) isLimitExists() bool {
-	return 0 < pf.totalMax
+func (poolFacade *PoolFacade) isConnectionLimitExistsLocked() bool {
+	return 0 < poolFacade.totalMax
+}
+
+func (poolFacade *PoolFacade) isFreeConnectionsNeeded() bool {
+	poolFacade.mu.Lock()
+	result := 0 < len(poolFacade.connRequests)
+	poolFacade.mu.Unlock()
+	return result
 }

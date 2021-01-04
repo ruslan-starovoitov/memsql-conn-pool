@@ -5,24 +5,24 @@ import (
 	"strconv"
 )
 
-func (pf *PoolFacade) incrementNumOpened() {
+func (poolFacade *PoolFacade) incrementNumOpened() {
 	log.Println("PoolFacade incrementNumOpened start")
-	pf.mu.Lock()
-	pf.numOpen++
-	pf.mu.Unlock()
+	poolFacade.mu.Lock()
+	poolFacade.numOpen++
+	poolFacade.mu.Unlock()
 	log.Println("PoolFacade incrementNumOpened end")
 }
 
-func (pf *PoolFacade) decrementNumOpened() {
+func (poolFacade *PoolFacade) decrementNumOpened() {
 	log.Println("PoolFacade decrementNumOpened start")
-	pf.mu.Lock()
-	pf.numOpen--
-	pf.mu.Unlock()
+	poolFacade.mu.Lock()
+	poolFacade.numOpen--
+	poolFacade.mu.Unlock()
 	log.Println("PoolFacade decrementNumOpened end")
 }
 
 //Stats TODO возвращает статистику текущего пула
-func (pf *PoolFacade) Stats() PoolFacadeStats {
+func (poolFacade *PoolFacade) Stats() PoolFacadeStats {
 	log.Println("stats request start")
 
 	//TODO заменить на счетчик
@@ -30,7 +30,7 @@ func (pf *PoolFacade) Stats() PoolFacadeStats {
 	index := 0
 
 	log.Println("stats iterating through pools")
-	for tuple := range pf.pools.IterBuffered() {
+	for tuple := range poolFacade.pools.IterBuffered() {
 		index++
 		connPool := tuple.Val.(*ConnPool)
 
@@ -47,15 +47,15 @@ func (pf *PoolFacade) Stats() PoolFacadeStats {
 	}
 	log.Println("stats after loop")
 
-	pf.mu.Lock()
+	poolFacade.mu.Lock()
 
 	result := PoolFacadeStats{
 		NumIdle:       numIdle,
-		NumOpen:       pf.numOpen,
-		TotalMax:      pf.totalMax,
-		NumUniqueDSNs: pf.pools.Count(),
+		NumOpen:       poolFacade.numOpen,
+		TotalMax:      poolFacade.totalMax,
+		NumUniqueDSNs: poolFacade.pools.Count(),
 	}
-	pf.mu.Unlock()
+	poolFacade.mu.Unlock()
 
 	log.Println("stats request end")
 
@@ -70,19 +70,19 @@ type PoolFacadeStats struct {
 	NumUniqueDSNs int
 }
 
-func (pf *PoolFacade) StatsOfAllPools() []ConnPoolStats {
-	pf.mu.Lock()
-	countOfPools := pf.pools.Count()
+func (poolFacade *PoolFacade) StatsOfAllPools() []ConnPoolStats {
+	poolFacade.mu.Lock()
+	countOfPools := poolFacade.pools.Count()
 	countOfPoolsStr := strconv.Itoa(countOfPools)
 	statsArray := make([]ConnPoolStats, 0)
 
 	log.Print("AAA/Number of pools " + countOfPoolsStr)
-	for tuple := range pf.pools.IterBuffered() {
+	for tuple := range poolFacade.pools.IterBuffered() {
 		log.Print("key is " + tuple.Key)
 		connPool := tuple.Val.(*ConnPool)
 		stats := connPool.Stats()
 		statsArray = append(statsArray, stats)
 	}
-	pf.mu.Unlock()
+	poolFacade.mu.Unlock()
 	return statsArray
 }

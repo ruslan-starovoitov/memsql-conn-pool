@@ -66,6 +66,9 @@ type ConnPool struct {
 	stop func() // stop cancels the connection opener.
 }
 
+//TODO если можно достёт соединение из кеша
+//     если можно создаёт новое соединение
+//    		иначе делает запрос на получение соединения
 // conn returns a newly-opened or cached *driverConn.
 func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn, error) {
 	log.Print("ConnPool conn")
@@ -73,19 +76,19 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 	connPool.mu.Lock()
 
 	if connPool.closed {
-		log.Print("ConnPool conn 1")
+		log.Print("ConnPool conn is closed")
 		connPool.mu.Unlock()
 		return nil, errDBClosed
 	} else {
-		log.Print("ConnPool conn 2")
+		log.Print("ConnPool conn is not closed")
 	}
 
 	// Check if the context is expired.
 	select {
 	default:
-		log.Print("ConnPool conn 3")
+		log.Print("ConnPool conn is not expired")
 	case <-ctx.Done():
-		log.Print("ConnPool conn 4")
+		log.Print("ConnPool conn is expired")
 		connPool.mu.Unlock()
 		return nil, ctx.Err()
 	}
@@ -124,6 +127,8 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 	} else {
 		log.Print("ConnPool conn canUseIdleConnection not")
 	}
+
+	connPool.mu.Unlock()
 
 	if connPool.poolFacade.isOpenConnectionLimitExceeded() {
 		log.Print("ConnPool conn isOpenConnectionLimitExceeded")
@@ -169,6 +174,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 				}
 			}
 			return nil, ctx.Err()
+		//created new connection
 		case ret, ok := <-responseChan:
 			atomic.AddInt64(&connPool.waitDuration, int64(time.Since(waitStart)))
 
@@ -203,22 +209,20 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		log.Print("ConnPool conn not isOpenConnectionLimitExceeded")
 	}
 
-	connPool.poolFacade.incrementNumOpened()
-	//connPool.numOpen++ // optimistically
-	connPool.mu.Unlock()
+	connPool.poolFacade.incrementNumOpened() // optimistically
+	//connPool.numOpen++
 
-	//TODO дорогая оперция создания нового соединения
 	//Создание нового соединения
 	ci, err := connPool.connector.Connect(ctx)
+
 	if err != nil {
-		connPool.mu.Lock()
 		connPool.poolFacade.decrementNumOpened()
 		//connPool.numOpen-- // correct for earlier optimism
-		//TODO попытка открыть новые соедиения
+		//TODO попытка открыть новые соединения
 		connPool.poolFacade.maybeOpenNewConnections()
-		connPool.mu.Unlock()
 		return nil, err
 	}
+
 	connPool.mu.Lock()
 	dc := &driverConn{
 		connPool:   connPool,
@@ -229,6 +233,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 	}
 	connPool.addDepLocked(dc, dc)
 	connPool.mu.Unlock()
+
 	return dc, nil
 }
 

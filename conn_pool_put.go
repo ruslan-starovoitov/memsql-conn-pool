@@ -26,42 +26,36 @@ func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) 
 		}
 	}
 
-	log.Println("ConnPool putConn 1")
 	connPool.mu.Lock()
 
-	log.Println("ConnPool putConn 1 1")
 	if !dc.inUse {
-		log.Println("ConnPool putConn 2 1")
+		log.Println("ConnPool putConn not dc.inUse")
 		connPool.mu.Unlock()
 		if debugGetPut {
 			fmt.Printf("putConn(%v) DUPLICATE was: %s\n\nPREVIOUS was: %s", dc, stack(), connPool.lastPut[dc])
 		}
 		panic("sql: connection returned that was never out")
 	} else {
-		log.Println("ConnPool putConn 2 2")
+		log.Println("ConnPool putConn dc.inUse")
 	}
 
-	log.Println("ConnPool putConn 3")
-
 	if err != driver.ErrBadConn && dc.expired(connPool.maxLifetime) {
+		log.Println("closing connection due to expiration")
 		connPool.maxLifetimeClosed++
 		err = driver.ErrBadConn
 	}
 
-	log.Println("ConnPool putConn 4")
 	if debugGetPut {
 		connPool.lastPut[dc] = stack()
 	}
 	dc.inUse = false
 	dc.returnedAt = nowFunc()
 
-	log.Println("ConnPool putConn 5")
 	for _, fn := range dc.onPut {
+		log.Println("call on put handlers")
 		fn()
 	}
 	dc.onPut = nil
-
-	log.Println("ConnPool putConn 6")
 
 	if err == driver.ErrBadConn {
 		// Don't reuse bad connections.
@@ -74,8 +68,8 @@ func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) 
 		return
 	}
 
-	log.Println("ConnPool putConn 7")
 	if putConnHook != nil {
+		log.Println("putConnHook is not nil")
 		putConnHook(connPool, dc)
 	}
 	added := connPool.putConnectionConnPoolLocked(dc, nil)
@@ -111,10 +105,7 @@ func (connPool *ConnPool) putConnectionConnPoolLocked(dc *driverConn, err error)
 		return false
 	}
 
-	connPool.poolFacade.mu.Lock()
-	needFreeConnection := 0 < len(connPool.poolFacade.connRequests)
-	connPool.poolFacade.mu.Unlock()
-	if needFreeConnection {
+	if connPool.poolFacade.isFreeConnectionsNeeded() {
 		return connPool.returnConnectionOnRequest(dc, err)
 	} else if err == nil && !connPool.closed {
 		//TODO добавить соединение в lru cache

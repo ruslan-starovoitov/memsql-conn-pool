@@ -27,6 +27,7 @@ func OpenDB(c driver.Connector) *ConnPool {
 	_, cancel := context.WithCancel(context.Background())
 	connPool := &ConnPool{
 		connector: c,
+		freeConn:  make(map[*driverConn]struct{}),
 		openerCh:  make(chan struct{}, connectionRequestQueueSize),
 		lastPut:   make(map[*driverConn]string),
 		//TODO добавить установку менеджера пулов

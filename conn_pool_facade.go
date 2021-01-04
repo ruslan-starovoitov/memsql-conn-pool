@@ -24,8 +24,8 @@ type ConnPoolFacade struct {
 
 	totalMax int // <= 0 means unlimited
 
-	numOpened int   // active + idle
-	waitCount int64 // Total number of connections waited for.
+	numOpened int // active + idle
+	waitCount int // Total number of connections waited for.
 
 	idleTimeout time.Duration
 	cancel      context.CancelFunc
@@ -34,7 +34,7 @@ type ConnPoolFacade struct {
 
 	mu sync.Mutex // protects following fields
 	//connRequests map[uint64]connRequest //для запросов на создание новых соединений
-	nextRequest uint64 // Next key to use in connRequests.
+	//nextRequest uint64 // Next key to use in connRequests.
 
 	openerChannel chan *ConnPool
 
@@ -45,9 +45,10 @@ type ConnPoolFacade struct {
 //если connectionLimit меньше или равен нулю, то ограничения нет
 // если idleTimeout будет установлен меньше, чем одна секунда, то он автоматически будет заменен на одну секунду
 func NewPoolFacade(driverName string, connectionLimit int, idleTimeout time.Duration) *ConnPoolFacade {
-	if _, ok := drivers[driverName]; !ok {
-		panic("Unexpected driver name. Please register driver.")
-	}
+	//TODO fix
+	//if _, ok := drivers[driverName]; !ok {
+	//	panic("Unexpected driver name. Please register driver.")
+	//}
 
 	//TODO Lru упадет, если передать аргумент меньше единицы
 	lruCache, err := lru.New(connectionLimit)
@@ -57,17 +58,15 @@ func NewPoolFacade(driverName string, connectionLimit int, idleTimeout time.Dura
 
 	ctx, cancel := context.WithCancel(context.Background())
 	poolFacade := ConnPoolFacade{
-		driverName:   driverName,
-		pools:        cmap.New(),
-		ctx:          ctx,
-		totalMax:     connectionLimit,
-		idleTimeout:  idleTimeout,
-		cancel:       cancel,
-		closed:       false,
-		mu:           sync.Mutex{},
-		connRequests: make(map[uint64]connRequest),
-		nextRequest:  0,
-		lruCache:     lruCache,
+		driverName:  driverName,
+		pools:       cmap.New(),
+		ctx:         ctx,
+		totalMax:    connectionLimit,
+		idleTimeout: idleTimeout,
+		cancel:      cancel,
+		closed:      false,
+		mu:          sync.Mutex{},
+		lruCache:    lruCache,
 		//TODO magic number
 		openerChannel: make(chan *ConnPool, 1000),
 	}
@@ -156,7 +155,7 @@ func (connPoolFacade *ConnPoolFacade) Close() {
 	connPoolFacade.cancel()
 }
 
-var errPoolFacadeClosed = errors.New("pools manager closed")
+var errPoolFacadeClosed = errors.New("pools facade closed")
 
 //getOrCreateConnPool создаёт новый пустой пул для нового data source name если его нет
 func (connPoolFacade *ConnPoolFacade) getOrCreateConnPool(credentials Credentials) (*ConnPool, error) {
@@ -199,11 +198,48 @@ func (connPoolFacade *ConnPoolFacade) isConnectionLimitExistsLocked() bool {
 }
 
 func (connPoolFacade *ConnPoolFacade) getNumOfConnRequestsLocked() int {
-
+	return connPoolFacade.waitCount
 }
 
-func (connPoolFacade *ConnPoolFacade) getConnPoolsThatHaveRequestedNewConnections(connections int) []*ConnPool {
+func (connPoolFacade *ConnPoolFacade) getConnPoolsThatHaveRequestedNewConnections(connectionsNum int) []*ConnPool {
+	if connectionsNum == 0 {
+		return nil
+	}
 
+	log.Printf("connectionsNum = %v\n", connectionsNum)
+	var slice []*ConnPool
+	connectionRemaining := connectionsNum
+	//пройтись по пулам
+	for tuple := range connPoolFacade.pools.IterBuffered() {
+		connPool, ok := tuple.Val.(*ConnPool)
+		if !ok {
+			panic("В словаре пулов лежит структура неизвестного типа.")
+		}
+
+		if connPool.waitCount == 0 {
+			continue
+		}
+
+		numOfNewConn := min(connPool.waitCount, connectionRemaining)
+		for i := 0; i < numOfNewConn; i++ {
+			slice = append(slice, connPool)
+		}
+
+		connectionRemaining -= numOfNewConn
+		log.Printf("connectionRemaining = %v, numOfNewConn = %v\n", connectionRemaining, numOfNewConn)
+		if connectionRemaining == 0 {
+			return slice
+		}
+	}
+
+	panic("Неправильно вычислено кол-во простаивающих соединений")
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 //func (connPoolFacade *ConnPoolFacade) isFreeConnectionsNeeded() bool {

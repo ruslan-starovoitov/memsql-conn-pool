@@ -53,15 +53,10 @@ func (connPool *ConnPool) connectionCleaner(duration time.Duration) {
 func (connPool *ConnPool) connectionCleanerRunLocked() (closing []*driverConn) {
 	if connPool.maxLifetime > 0 {
 		expiredSince := nowFunc().Add(-connPool.maxLifetime)
-		for i := 0; i < len(connPool.freeConn); i++ {
-			c := connPool.freeConn[i]
-			if c.createdAt.Before(expiredSince) {
-				closing = append(closing, c)
-				last := len(connPool.freeConn) - 1
-				connPool.freeConn[i] = connPool.freeConn[last]
-				connPool.freeConn[last] = nil
-				connPool.freeConn = connPool.freeConn[:last]
-				i--
+		for conn := range connPool.freeConn {
+			if conn.createdAt.Before(expiredSince) {
+				closing = append(closing, conn)
+				delete(connPool.freeConn, conn)
 			}
 		}
 		connPool.maxLifetimeClosed += int64(len(closing))
@@ -70,18 +65,15 @@ func (connPool *ConnPool) connectionCleanerRunLocked() (closing []*driverConn) {
 	if connPool.maxIdleTime > 0 {
 		expiredSince := nowFunc().Add(-connPool.maxIdleTime)
 		var expiredCount int64
-		for i := 0; i < len(connPool.freeConn); i++ {
-			c := connPool.freeConn[i]
-			if connPool.maxIdleTime > 0 && c.returnedAt.Before(expiredSince) {
-				closing = append(closing, c)
+
+		for conn := range connPool.freeConn {
+			if connPool.maxIdleTime > 0 && conn.returnedAt.Before(expiredSince) {
+				closing = append(closing, conn)
 				expiredCount++
-				last := len(connPool.freeConn) - 1
-				connPool.freeConn[i] = connPool.freeConn[last]
-				connPool.freeConn[last] = nil
-				connPool.freeConn = connPool.freeConn[:last]
-				i--
+				delete(connPool.freeConn, conn)
 			}
 		}
+
 		connPool.maxIdleTimeClosed += expiredCount
 	}
 	return

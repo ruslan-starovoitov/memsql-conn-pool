@@ -23,14 +23,6 @@ func (connPoolFacade *ConnPoolFacade) connectionOpener(ctx context.Context) {
 	}
 }
 
-// nextRequestKeyLocked returns the next connection request key.
-// It is assumed that nextRequest will not overflow.
-func (connPoolFacade *ConnPoolFacade) nextRequestKeyLocked() uint64 {
-	next := connPoolFacade.nextRequest
-	connPoolFacade.nextRequest++
-	return next
-}
-
 // TODO Даёт команду открыть новые соединения если нужно.
 //  Если лимит превышен, то попытается закрыть idle соединения.
 // If there are connRequests and the connection limit hasn't been reached,
@@ -48,8 +40,8 @@ func (connPoolFacade *ConnPoolFacade) maybeOpenNewConnections() {
 	numCanOpenConnections := limit - numOpened
 
 	//try to close idle connections if needed
-	needToCloseIdleConns := numCanOpenConnections < numConnectionsRequested
-	if needToCloseIdleConns {
+	isNeedToCloseIdleConns := numCanOpenConnections < numConnectionsRequested
+	if isNeedToCloseIdleConns {
 		numIdleConnToClose := numConnectionsRequested - numCanOpenConnections
 		numOfIdleConn := connPoolFacade.lruCache.Len()
 		if numOfIdleConn < numIdleConnToClose {

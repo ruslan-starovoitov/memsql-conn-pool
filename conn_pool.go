@@ -39,7 +39,7 @@ type ConnPool struct {
 	//freeConn []*driverConn
 	freeConn     map[*driverConn]struct{}
 	connRequests map[uint64]chan connCreationResponse
-	//nextRequest  uint64 // Next key to use in connRequests.
+	nextRequest  uint64 // Next key to use in connRequests.
 	//TODO numInUse + numIdle
 	numOpen int // number of opened and pending open connections
 	// Used to signal the need for new connections
@@ -58,11 +58,12 @@ type ConnPool struct {
 	maxLifetime time.Duration // maximum amount of time a connection may be reused
 	maxIdleTime time.Duration // maximum amount of time a connection may be idle before being closed
 
-	cleanerCh         chan struct{} //TODO что это maxLifetime was changed or connPool was closed.
-	waitCount         int64         // Total number of connections waited for.
-	maxIdleClosed     int64         // Total number of connections closed due to idle count.
-	maxIdleTimeClosed int64         // Total number of connections closed due to idle time.
-	maxLifetimeClosed int64         // Total number of connections closed due to max connection lifetime limit.
+	cleanerCh chan struct{} //TODO что это maxLifetime was changed or connPool was closed.
+	//waitCount         int64         // Total number of connections waited for.
+	waitCount         int   // Total number of connections waited for.
+	maxIdleClosed     int64 // Total number of connections closed due to idle count.
+	maxIdleTimeClosed int64 // Total number of connections closed due to idle time.
+	maxLifetimeClosed int64 // Total number of connections closed due to max connection lifetime limit.
 
 	stop func() // stop cancels the connection opener.
 }
@@ -205,15 +206,16 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		// connectionOpener doesn't block while waiting for the responseChan to be read.
 
 		responseChan := make(chan connCreationResponse, 1)
-		reqKey := connPool.poolFacade.nextRequestKeyLocked()
+		reqKey := connPool.nextRequestKeyLocked()
 
+		connPool.connRequests[reqKey] = responseChan
+
+		//TODO изолировать
 		connPool.poolFacade.mu.Lock()
-		connPool.poolFacade.connRequests[reqKey] = connRequest{
-			connPool: connPool,
-			responce: responseChan,
-		}
 		connPool.poolFacade.waitCount++
 		connPool.poolFacade.mu.Unlock()
+
+		connPool.waitCount++
 		connPool.mu.Unlock()
 
 		waitStart := nowFunc()
@@ -225,7 +227,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 			// Remove the connection request and ensure no value has been sent
 			// on it after removing.
 			connPool.poolFacade.mu.Lock()
-			delete(connPool.poolFacade.connRequests, reqKey)
+			delete(connPool.connRequests, reqKey)
 			connPool.poolFacade.mu.Unlock()
 
 			atomic.AddInt64(&connPool.waitDuration, int64(time.Since(waitStart)))
@@ -301,6 +303,14 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 	connPool.mu.Unlock()
 
 	return dc, nil
+}
+
+// nextRequestKeyLocked returns the next connection request key.
+// It is assumed that nextRequest will not overflow.
+func (connPool *ConnPool) nextRequestKeyLocked() uint64 {
+	next := connPool.nextRequest
+	connPool.nextRequest++
+	return next
 }
 
 // noteUnusedDriverStatement notes that ds is no longer used and should

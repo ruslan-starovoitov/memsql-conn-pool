@@ -19,7 +19,7 @@ const (
 )
 
 func init() {
-	pm := cpool.NewPoolFacade("mysql", 1, time.Second)
+	poolFacade := cpool.NewPoolFacade("mysql", 1, time.Second)
 	sql := `
 	CREATE DATABASE IF NOT EXISTS hellomemsql;
 	CREATE TABLE IF NOT EXISTS hellomemsql.test (message text NOT NULL);	
@@ -48,7 +48,7 @@ func init() {
 
 	FLUSH PRIVILEGES;`
 	statements := strings.Split(sql, ";")
-	tx, errTx := pm.BeginTx(initCredentials)
+	tx, errTx := poolFacade.BeginTx(initCredentials)
 	if errTx != nil {
 		panic(errTx)
 	}

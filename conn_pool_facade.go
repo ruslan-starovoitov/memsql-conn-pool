@@ -165,9 +165,7 @@ func (connPoolFacade *ConnPoolFacade) getOrCreateConnPool(credentials Credential
 	//Create pool if not exists
 	if !connPoolFacade.pools.Has(credentials.GetId()) {
 		dsn := GetDataSourceName(credentials)
-		//TODO заменить название драйвера
-		//TODO это плохо что общая библиотека зависит от mysql
-		//нужно, чтобы название драйвера устанавливалось при инициализации пула
+
 		connPool, err := Open(connPoolFacade.driverName, dsn)
 		if err != nil {
 			return nil, err
@@ -207,7 +205,6 @@ func (connPoolFacade *ConnPoolFacade) getConnPoolsThatHaveRequestedNewConnection
 	}
 
 	log.Printf("connectionsNum = %v\n", connectionsNum)
-
 	log.Printf("facade wait count = %v\n", connPoolFacade.waitCount)
 	var slice []*ConnPool
 	connectionRemaining := connectionsNum
@@ -247,10 +244,3 @@ func min(a, b int) int {
 	}
 	return b
 }
-
-//func (connPoolFacade *ConnPoolFacade) isFreeConnectionsNeeded() bool {
-//	connPoolFacade.mu.Lock()
-//	result := 0 < len(connPoolFacade.connRequests)
-//	connPoolFacade.mu.Unlock()
-//	return result
-//}

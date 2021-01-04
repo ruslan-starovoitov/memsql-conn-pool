@@ -9,13 +9,13 @@ import (
 
 //TODO add comments
 
-func execSleepWait(delay time.Duration, credentials cpool.Credentials, wg *sync.WaitGroup, pm *cpool.ConnPoolFacade) {
-	execSleep(delay, credentials, pm)
+func execSleepWait(delay time.Duration, credentials cpool.Credentials, wg *sync.WaitGroup, poolFacade *cpool.ConnPoolFacade) {
+	execSleep(delay, credentials, poolFacade)
 	wg.Done()
 }
 
-func execSleep(delay time.Duration, credentials cpool.Credentials, pm *cpool.ConnPoolFacade) {
-	_, err := pm.Exec(credentials, fmt.Sprintf("select sleep(%v)", delay.Seconds()))
+func execSleep(delay time.Duration, credentials cpool.Credentials, poolFacade *cpool.ConnPoolFacade) {
+	_, err := poolFacade.Exec(credentials, fmt.Sprintf("select sleep(%v)", delay.Seconds()))
 	if err != nil {
 		panic(err)
 	}
@@ -26,8 +26,8 @@ func querySleepWait(delay time.Duration, credentials cpool.Credentials, wg *sync
 	wg.Done()
 }
 
-func querySleep(delay time.Duration, credentials cpool.Credentials, pm *cpool.ConnPoolFacade) {
-	rows, err := pm.Query(credentials, fmt.Sprintf("select sleep(%v)", delay.Seconds()))
+func querySleep(delay time.Duration, credentials cpool.Credentials, poolFacade *cpool.ConnPoolFacade) {
+	rows, err := poolFacade.Query(credentials, fmt.Sprintf("select sleep(%v)", delay.Seconds()))
 	if err != nil {
 		panic(err)
 	}
@@ -42,8 +42,8 @@ func queryRowSleepWait(delay time.Duration, credentials cpool.Credentials, wg *s
 	wg.Done()
 }
 
-func queryRowSleep(delay time.Duration, credentials cpool.Credentials, pm *cpool.ConnPoolFacade) {
-	row, err := pm.QueryRow(credentials, fmt.Sprintf("select sleep(%v)", delay.Seconds()))
+func queryRowSleep(delay time.Duration, credentials cpool.Credentials, poolFacade *cpool.ConnPoolFacade) {
+	row, err := poolFacade.QueryRow(credentials, fmt.Sprintf("select sleep(%v)", delay.Seconds()))
 	if err != nil {
 		panic(err)
 	}

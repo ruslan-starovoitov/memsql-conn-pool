@@ -71,18 +71,17 @@ type PoolFacadeStats struct {
 }
 
 func (connPoolFacade *ConnPoolFacade) StatsOfAllPools() []ConnPoolStats {
-	connPoolFacade.mu.Lock()
 	countOfPools := connPoolFacade.pools.Count()
 	countOfPoolsStr := strconv.Itoa(countOfPools)
 	statsArray := make([]ConnPoolStats, 0)
 
-	log.Print("AAA/Number of pools " + countOfPoolsStr)
+	log.Print("Number of pools " + countOfPoolsStr)
 	for tuple := range connPoolFacade.pools.IterBuffered() {
 		log.Print("key is " + tuple.Key)
 		connPool := tuple.Val.(*ConnPool)
 		stats := connPool.Stats()
 		statsArray = append(statsArray, stats)
 	}
-	connPoolFacade.mu.Unlock()
+
 	return statsArray
 }

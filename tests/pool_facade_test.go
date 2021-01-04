@@ -60,11 +60,11 @@ func TestCrateDBConnect(t *testing.T) {
 	t.Parallel()
 
 	// Create pool
-	pm := cpool.NewPoolFacade("mysql", concurrencyLevel, idleTimeout)
-	defer pm.Close()
+	poolFacade := cpool.NewPoolFacade("mysql", concurrencyLevel, idleTimeout)
+	defer poolFacade.Close()
 
 	// Run simple query
-	row, err := pm.QueryRow(user1Db1Credentials, "select 1+1")
+	row, err := poolFacade.QueryRow(user1Db1Credentials, "select 1+1")
 	assert.NoError(t, err, "Unable to get connection")
 
 	var result int
@@ -77,12 +77,12 @@ func TestConnectToDesiredDatabase(t *testing.T) {
 	t.Parallel()
 
 	// Create pool
-	pm := cpool.NewPoolFacade("mysql", concurrencyLevel, idleTimeout)
-	defer pm.Close()
+	poolFacade := cpool.NewPoolFacade("mysql", concurrencyLevel, idleTimeout)
+	defer poolFacade.Close()
 
 	for _, cr := range credentials {
 		// Check database name
-		row, err := pm.QueryRow(cr, "SELECT DATABASE();")
+		row, err := poolFacade.QueryRow(cr, "SELECT DATABASE();")
 		assert.NoError(t, err, "connection error")
 
 		var currentDB string
@@ -91,7 +91,7 @@ func TestConnectToDesiredDatabase(t *testing.T) {
 		assert.Equal(t, cr.Database, currentDB, "Did not connect to specified database ")
 
 		// Check user name
-		row, err = pm.QueryRow(cr, "select current_user")
+		row, err = poolFacade.QueryRow(cr, "select current_user")
 		assert.NoError(t, err, "connection error")
 
 		var user string
@@ -105,35 +105,35 @@ func TestPoolClosing(t *testing.T) {
 	t.Parallel()
 
 	// Create pool
-	pm := cpool.NewPoolFacade("mysql", concurrencyLevel, idleTimeout)
+	poolFacade := cpool.NewPoolFacade("mysql", concurrencyLevel, idleTimeout)
 
 	// Check pool closing
-	pm.Close()
-	_, err := pm.QueryRow(user1Db1Credentials, "select 1+1")
+	poolFacade.Close()
+	_, err := poolFacade.QueryRow(user1Db1Credentials, "select 1+1")
 	assert.Error(t, err, "Unable to close connection")
 }
 
 func TestExecFailure(t *testing.T) {
 	t.Parallel()
 
-	pm := cpool.NewPoolFacade("mysql", concurrencyLevel, idleTimeout)
-	defer pm.Close()
+	poolFacade := cpool.NewPoolFacade("mysql", concurrencyLevel, idleTimeout)
+	defer poolFacade.Close()
 
-	_, err := pm.Exec(user1Db1Credentials, "incorrect sql statement;")
+	_, err := poolFacade.Exec(user1Db1Credentials, "incorrect sql statement;")
 	assert.Error(t, err, "connection error")
 
-	_, err = pm.Exec(user1Db1Credentials, "select 1;")
+	_, err = poolFacade.Exec(user1Db1Credentials, "select 1;")
 	assert.NoError(t, err, "Exec failure appears to have broken connection")
-	pm.Close()
+	poolFacade.Close()
 }
 
 func TestExecFailureCloseBefore(t *testing.T) {
 	t.Parallel()
 
-	pm := cpool.NewPoolFacade("mysql", concurrencyLevel, idleTimeout)
-	pm.Close()
+	poolFacade := cpool.NewPoolFacade("mysql", concurrencyLevel, idleTimeout)
+	poolFacade.Close()
 
-	_, err := pm.Exec(user1Db1Credentials, "select 1")
+	_, err := poolFacade.Exec(user1Db1Credentials, "select 1")
 	require.Error(t, err)
 }
 
@@ -157,18 +157,18 @@ func TestConnectionReuseInSequentialRequests(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			pm := cpool.NewPoolFacade("mysql", connectionLimit, time.Minute)
-			defer pm.Close()
+			poolFacade := cpool.NewPoolFacade("mysql", connectionLimit, time.Minute)
+			defer poolFacade.Close()
 
 			//execute sequential requests
 			for i := 0; i < 5; i++ {
-				testCase.function(time.Second, user4Db2Credentials, pm)
+				testCase.function(time.Second, user4Db2Credentials, poolFacade)
 			}
 
 			time.Sleep(time.Second * 2)
 
 			//check that only one connection was created
-			stats := pm.Stats()
+			stats := poolFacade.Stats()
 			assert.Equal(t, 1, stats.NumUniqueDSNs, "number of unique dsn")
 			assert.Equal(t, connectionLimit, stats.TotalMax, "total max")
 			assert.Equal(t, 1, stats.NumIdle, "num idle")
@@ -197,16 +197,16 @@ func TestStatsOneConnectionExec(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			pm := cpool.NewPoolFacade("mysql", 1, idleTimeout)
+			poolFacade := cpool.NewPoolFacade("mysql", 1, idleTimeout)
 			var wg sync.WaitGroup
 			wg.Add(1)
 			//run query to database
-			go testCase.function(time.Second, user5Db2Credentials, &wg, pm)
+			go testCase.function(time.Second, user5Db2Credentials, &wg, poolFacade)
 
 			wg.Wait()
 
 			//check pool facade stats
-			stats := pm.Stats()
+			stats := poolFacade.Stats()
 			log.Printf("%+v\n", stats)
 			assert.Equal(t, 1, stats.NumUniqueDSNs, "number of unique dsn")
 			assert.Equal(t, 1, stats.TotalMax, "total max")
@@ -214,7 +214,7 @@ func TestStatsOneConnectionExec(t *testing.T) {
 			assert.Equal(t, 1, stats.NumOpen, "num open")
 
 			//check pool stats
-			allStats := pm.StatsOfAllPools()
+			allStats := poolFacade.StatsOfAllPools()
 			countOfPools := len(allStats)
 			assert.Equal(t, 1, countOfPools, "too many pools")
 			connPoolStats := allStats[0]
@@ -232,23 +232,23 @@ func TestNumberOfIdleConnections(t *testing.T) {
 
 	// create pool
 	connectionLimit := 5
-	pm := cpool.NewPoolFacade("mysql", connectionLimit, idleTimeout)
+	poolFacade := cpool.NewPoolFacade("mysql", connectionLimit, idleTimeout)
 
-	defer pm.Close()
+	defer poolFacade.Close()
 
 	var wg sync.WaitGroup
 	// parallel requests
 	for i := 0; i < connectionLimit; i++ {
 		wg.Add(1)
 
-		go execSleepWait(2, credentials[i], &wg, pm)
+		go execSleepWait(2, credentials[i], &wg, poolFacade)
 	}
 
 	// wait
 	wg.Wait()
 	time.Sleep(time.Second * 5)
 	// check open connections
-	stats := pm.Stats()
+	stats := poolFacade.Stats()
 	assert.Equal(t, connectionLimit, stats.NumUniqueDSNs)
 	assert.Equal(t, connectionLimit, stats.TotalMax)
 	assert.Equal(t, connectionLimit, stats.NumOpen)
@@ -261,8 +261,8 @@ func TestReleaseIdleConnectionIfLimitExceeded(t *testing.T) {
 	// create pool with long idle timeout
 	var wg sync.WaitGroup
 	connectionLimit := 2
-	pm := cpool.NewPoolFacade("mysql", connectionLimit, 5*time.Minute)
-	defer pm.Close()
+	poolFacade := cpool.NewPoolFacade("mysql", connectionLimit, 5*time.Minute)
+	defer poolFacade.Close()
 
 	queryExecutionDuration := 2 * time.Second
 	//четверть секунды на накладные расходы на передачу данных по сети и работу БД
@@ -272,7 +272,7 @@ func TestReleaseIdleConnectionIfLimitExceeded(t *testing.T) {
 	//make connectionLimit queries
 	for i := 0; i < connectionLimit; i++ {
 		wg.Add(1)
-		go execSleepWait(queryExecutionDuration, user4Db2Credentials, &wg, pm)
+		go execSleepWait(queryExecutionDuration, user4Db2Credentials, &wg, poolFacade)
 	}
 
 	//wait for their execution
@@ -283,13 +283,13 @@ func TestReleaseIdleConnectionIfLimitExceeded(t *testing.T) {
 		log.Printf("first duration is %v\n", duration.Seconds())
 	}
 
-	stats := pm.Stats()
+	stats := poolFacade.Stats()
 	assert.Equal(t, connectionLimit, stats.NumIdle)
 	assert.Equal(t, connectionLimit, stats.NumOpen)
 
 	//make another query with different credentials
 	wg.Add(1)
-	go execSleepWait(queryExecutionDuration, user1Db1Credentials, &wg, pm)
+	go execSleepWait(queryExecutionDuration, user1Db1Credentials, &wg, poolFacade)
 
 	//wait for new query
 	ok, duration = waitTimeout(&wg, queryTimeoutDuration)
@@ -300,7 +300,7 @@ func TestReleaseIdleConnectionIfLimitExceeded(t *testing.T) {
 	}
 
 	// check open connections
-	stats = pm.Stats()
+	stats = poolFacade.Stats()
 	assert.Equal(t, connectionLimit, stats.NumIdle)
 }
 
@@ -311,8 +311,8 @@ func TestExceedingConnectionLimit(t *testing.T) {
 	var wg sync.WaitGroup
 	connectionLimit := 5
 	parallelConnections := 10
-	pm := cpool.NewPoolFacade("mysql", connectionLimit, 5*time.Minute)
-	defer pm.Close()
+	poolFacade := cpool.NewPoolFacade("mysql", connectionLimit, 5*time.Minute)
+	defer poolFacade.Close()
 
 	queryExecutionDuration := 2 * time.Second
 	//четверть секунды на накладные расходы на передачу данных по сети и работу БД
@@ -321,7 +321,7 @@ func TestExceedingConnectionLimit(t *testing.T) {
 	//заполнить пул запросами
 	for i := 0; i < parallelConnections; i++ {
 		wg.Add(1)
-		go execSleepWait(queryExecutionDuration, user4Db2Credentials, &wg, pm)
+		go execSleepWait(queryExecutionDuration, user4Db2Credentials, &wg, poolFacade)
 	}
 
 	//wait for their execution
@@ -337,7 +337,7 @@ func TestExceedingConnectionLimit(t *testing.T) {
 	//}
 
 	// check open connections
-	stats := pm.Stats()
+	stats := poolFacade.Stats()
 	assert.Equal(t, connectionLimit, stats.NumIdle)
 }
 
@@ -346,18 +346,18 @@ func TestConnectionLifetimeExceeded(t *testing.T) {
 	t.Parallel()
 
 	// create pool
-	pm := cpool.NewPoolFacade("mysql", 1, time.Second)
-	defer pm.Close()
+	poolFacade := cpool.NewPoolFacade("mysql", 1, time.Second)
+	defer poolFacade.Close()
 
 	// exec
-	_, err := pm.Exec(user5Db2Credentials, "select 1;")
+	_, err := poolFacade.Exec(user5Db2Credentials, "select 1;")
 	assert.NoError(t, err)
 
 	// sleep for delete idle connection
 	time.Sleep(2 * time.Second)
 
 	// check that connection killed
-	stats := pm.Stats()
+	stats := poolFacade.Stats()
 	assert.Equal(t, 0, stats.NumIdle)
 	assert.Equal(t, 0, stats.NumOpen)
 	assert.Equal(t, 1, stats.TotalMax)
@@ -368,17 +368,17 @@ func TestConnectionLifetimeNotExceeded(t *testing.T) {
 	t.Parallel()
 
 	// create pool
-	pm := cpool.NewPoolFacade("mysql", 1, time.Second)
-	defer pm.Close()
+	poolFacade := cpool.NewPoolFacade("mysql", 1, time.Second)
+	defer poolFacade.Close()
 
 	// exec
-	execSleep(time.Second, user5Db2Credentials, pm)
+	execSleep(time.Second, user5Db2Credentials, poolFacade)
 
 	// no sleep
 	//time.Sleep(2*time.Second)
 
 	// check that connection killed
-	stats := pm.Stats()
+	stats := poolFacade.Stats()
 	assert.Equal(t, 1, stats.NumIdle, "num idle")
 	assert.Equal(t, 1, stats.NumOpen, "num open")
 	assert.Equal(t, 1, stats.TotalMax, "total max")
@@ -406,4 +406,98 @@ func TestCreatePoolWithDifferentConnectionLimits(t *testing.T) {
 			_ = cpool.NewPoolFacade("mysql", testCase.connectionLimit, time.Second)
 		})
 	}
+}
+
+//при переиспользовании возвращается канал по нужным логину и паролю
+func TestConnectToDesiredDatabaseReuse(t *testing.T) {
+	t.Parallel()
+
+	// Create pool
+	connectionLimit := 1
+	numRepetitions := 10
+	poolFacade := cpool.NewPoolFacade("mysql", connectionLimit, idleTimeout)
+	defer poolFacade.Close()
+
+	for _, cr := range credentials {
+		for i := 0; i < numRepetitions; i++ {
+			// Check database name
+			row, err := poolFacade.QueryRow(cr, "SELECT DATABASE();")
+			require.NoError(t, err, "connection error")
+
+			var currentDB string
+			err = row.Scan(&currentDB)
+			require.NoError(t, err, "QueryRow Scan unexpectedly failed")
+			require.Equal(t, cr.Database, currentDB, "Did not connect to specified database ")
+
+			// Check user name
+			row, err = poolFacade.QueryRow(cr, "select current_user")
+			require.NoError(t, err, "connection error")
+
+			var user string
+			err = row.Scan(&user)
+			require.NoError(t, err, "QueryRow Scan unexpectedly failed")
+			require.Equal(t, cr.Username+"@%", user, "Did not connect as specified user")
+		}
+	}
+}
+
+//проверить, что закроет старое простаивающее соединение
+func TestConnPoolFacadeCloseIdleConnIfLimitExceeded(t *testing.T) {
+	t.Parallel()
+
+	// Create pool
+	connectionLimit := 1
+	poolFacade := cpool.NewPoolFacade("mysql", connectionLimit, idleTimeout)
+	defer poolFacade.Close()
+
+	for _, cr := range credentials {
+		// Check database name
+		row, err := poolFacade.QueryRow(cr, "SELECT DATABASE();")
+		require.NoError(t, err, "connection error")
+
+		var currentDB string
+		err = row.Scan(&currentDB)
+		require.NoError(t, err, "QueryRow Scan unexpectedly failed")
+		require.Equal(t, cr.Database, currentDB, "Did not connect to specified database ")
+
+		// Check user name
+		row, err = poolFacade.QueryRow(cr, "select current_user")
+		require.NoError(t, err, "connection error")
+
+		var user string
+		err = row.Scan(&user)
+		require.NoError(t, err, "QueryRow Scan unexpectedly failed")
+		require.Equal(t, cr.Username+"@%", user, "Did not connect as specified user")
+
+		stats := poolFacade.Stats()
+		log.Printf("%+v\n", stats)
+		require.Equal(t, connectionLimit, stats.NumOpen)
+	}
+}
+
+//проверить, что закроет старое простаивающее соединение
+func TestSimpleConnectionStatsCheck(t *testing.T) {
+	t.Parallel()
+
+	// Create pool
+	connectionLimit := 1
+	poolFacade := cpool.NewPoolFacade("mysql", connectionLimit, idleTimeout)
+	defer poolFacade.Close()
+
+	stats := poolFacade.Stats()
+	assert.Equal(t, 0, stats.NumOpen)
+	assert.Equal(t, 0, stats.NumIdle)
+	assert.Equal(t, 0, stats.NumUniqueDSNs)
+	assert.Equal(t, connectionLimit, stats.TotalMax)
+
+	execSleep(time.Second*2, user6Db2Credentials, poolFacade)
+
+	stats = poolFacade.Stats()
+	assert.Equal(t, 1, stats.NumOpen)
+	assert.Equal(t, 1, stats.NumIdle)
+	assert.Equal(t, 1, stats.NumUniqueDSNs)
+	assert.Equal(t, connectionLimit, stats.TotalMax)
+
+	allPoolsStats := poolFacade.StatsOfAllPools()
+	log.Printf("%+v\n", allPoolsStats)
 }

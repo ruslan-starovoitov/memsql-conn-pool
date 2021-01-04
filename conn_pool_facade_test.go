@@ -49,13 +49,13 @@ package cpool
 //	assert.Equal(t, connectionLimit, stats.NumIdle)
 //}
 //
-//func execSleepWait(delay time.Duration, credentials Credentials, wg *sync.WaitGroup, pm *ConnPoolFacade) {
-//	execSleep(delay, credentials, pm)
+//func execSleepWait(delay time.Duration, credentials Credentials, wg *sync.WaitGroup, poolFacade*ConnPoolFacade) {
+//	execSleep(delay, credentials, poolFacade)
 //	wg.Done()
 //}
 //
-//func execSleep(delay time.Duration, credentials Credentials, pm *ConnPoolFacade) {
-//	_, err := pm.Exec(credentials, fmt.Sprintf("select sleep(%v)", delay.Seconds()))
+//func execSleep(delay time.Duration, credentials Credentials, poolFacade*ConnPoolFacade) {
+//	_, err := poolFacade.Exec(credentials, fmt.Sprintf("select sleep(%v)", delay.Seconds()))
 //	if err != nil {
 //		panic(err)
 //	}

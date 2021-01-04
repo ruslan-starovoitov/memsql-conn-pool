@@ -6,23 +6,24 @@ import (
 )
 
 func (pf *PoolFacade) incrementNumOpened() {
+	log.Println("PoolFacade incrementNumOpened start")
 	pf.mu.Lock()
 	pf.numOpen++
 	pf.mu.Unlock()
+	log.Println("PoolFacade incrementNumOpened end")
 }
 
 func (pf *PoolFacade) decrementNumOpened() {
+	log.Println("PoolFacade decrementNumOpened start")
 	pf.mu.Lock()
 	pf.numOpen--
 	pf.mu.Unlock()
+	log.Println("PoolFacade decrementNumOpened end")
 }
 
 //Stats TODO возвращает статистику текущего пула
 func (pf *PoolFacade) Stats() PoolFacadeStats {
 	log.Println("stats request start")
-
-	pf.mu.Lock()
-	defer pf.mu.Unlock()
 
 	//TODO заменить на счетчик
 	numIdle := 0
@@ -35,8 +36,9 @@ func (pf *PoolFacade) Stats() PoolFacadeStats {
 
 		log.Printf("stats iterating through pools index=%v\n", index)
 
+		log.Println("before lock")
+		//connPool.mu.state
 		connPool.mu.Lock()
-
 		log.Println("lock")
 		numIdle += len(connPool.freeConn)
 		connPool.mu.Unlock()
@@ -44,12 +46,16 @@ func (pf *PoolFacade) Stats() PoolFacadeStats {
 
 	}
 	log.Println("stats after loop")
+
+	pf.mu.Lock()
+
 	result := PoolFacadeStats{
 		NumIdle:       numIdle,
 		NumOpen:       pf.numOpen,
 		TotalMax:      pf.totalMax,
 		NumUniqueDSNs: pf.pools.Count(),
 	}
+	pf.mu.Unlock()
 
 	log.Println("stats request end")
 

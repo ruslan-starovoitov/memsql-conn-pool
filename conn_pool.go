@@ -4,6 +4,7 @@ import (
 	"context"
 	"cpool/driver"
 	"errors"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -67,18 +68,24 @@ type ConnPool struct {
 
 // conn returns a newly-opened or cached *driverConn.
 func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn, error) {
+	log.Print("ConnPool conn")
 	// Check if the context is closed.
 	connPool.mu.Lock()
 
 	if connPool.closed {
+		log.Print("ConnPool conn 1")
 		connPool.mu.Unlock()
 		return nil, errDBClosed
+	} else {
+		log.Print("ConnPool conn 2")
 	}
 
 	// Check if the context is expired.
 	select {
 	default:
+		log.Print("ConnPool conn 3")
 	case <-ctx.Done():
+		log.Print("ConnPool conn 4")
 		connPool.mu.Unlock()
 		return nil, ctx.Err()
 	}
@@ -86,9 +93,9 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 
 	// Prefer a free connection, if possible.
 	numFree := len(connPool.freeConn)
-	canUseIdleConnection := strategy == cachedOrNewConn && numFree > 0
+	canUseIdleConnection := strategy == cachedOrNewConn && 0 < numFree
 	if canUseIdleConnection {
-
+		log.Print("ConnPool conn canUseIdleConnection")
 		//remove idle connection from slice
 		conn := connPool.freeConn[0]
 		copy(connPool.freeConn, connPool.freeConn[1:])
@@ -114,9 +121,12 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 
 		//Success. Found cached connection.
 		return conn, nil
+	} else {
+		log.Print("ConnPool conn canUseIdleConnection not")
 	}
 
 	if connPool.poolFacade.isOpenConnectionLimitExceeded() {
+		log.Print("ConnPool conn isOpenConnectionLimitExceeded")
 		// TODO try to remove idle connection from another connection pool and
 		//  wait for free connection
 
@@ -189,11 +199,15 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 			}
 			return ret.conn, ret.err
 		}
+	} else {
+		log.Print("ConnPool conn not isOpenConnectionLimitExceeded")
 	}
 
 	connPool.poolFacade.incrementNumOpened()
 	//connPool.numOpen++ // optimistically
 	connPool.mu.Unlock()
+
+	//TODO дорогая оперция создания нового соединения
 	//Создание нового соединения
 	ci, err := connPool.connector.Connect(ctx)
 	if err != nil {

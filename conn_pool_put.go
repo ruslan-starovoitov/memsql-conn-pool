@@ -98,18 +98,18 @@ func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) 
 // freeConn list, then true is returned, otherwise false is returned.
 func (connPool *ConnPool) putConnectionConnPoolLocked(dc *driverConn, err error) bool {
 	log.Println("connPool putConnectionConnPoolLocked")
+
 	if connPool.closed {
 		return false
 	}
 	if connPool.poolFacade.isOpenConnectionLimitExceeded() {
+		log.Println("warning connPool putConnectionConnPoolLocked")
 		return false
 	}
-
 	if connPool.isFreeConnectionsNeededLocked() {
-		return connPool.returnConnectionOnRequest(dc, err)
+		return connPool.returnConnectionOnRequestLocked(dc, err)
 	} else if err == nil && !connPool.closed {
-		//TODO добавить соединение в lru cache
-		return connPool.trySaveConnectionAsIdle(dc)
+		return connPool.tryToSaveConnectionAsIdleLocked(dc)
 	}
 	return false
 }
@@ -118,8 +118,8 @@ func (connPool *ConnPool) isFreeConnectionsNeededLocked() bool {
 	return 0 < connPool.waitCount
 }
 
-func (connPool *ConnPool) returnConnectionOnRequest(dc *driverConn, err error) bool {
-	log.Println("conn pool returnConnectionOnRequest")
+func (connPool *ConnPool) returnConnectionOnRequestLocked(dc *driverConn, err error) bool {
+	log.Println("conn pool returnConnectionOnRequestLocked")
 	var requestKey uint64
 	var requestChan chan connCreationResponse
 
@@ -149,15 +149,15 @@ func (connPool *ConnPool) returnConnectionOnRequest(dc *driverConn, err error) b
 	return true
 }
 
-func (connPool *ConnPool) trySaveConnectionAsIdle(dc *driverConn) bool {
-	log.Println("conn pool trySaveConnectionAsIdle")
-	limitIsNotExceeded := len(connPool.freeConn) < connPool.maxIdleConnsLocked()
-	if limitIsNotExceeded {
-		connPool.freeConn = append(connPool.freeConn, dc)
-		connPool.startCleanerLocked()
-		return true
-	} else {
-		connPool.maxIdleClosed++
-		return false
+func (connPool *ConnPool) tryToSaveConnectionAsIdleLocked(dc *driverConn) bool {
+	log.Println("conn pool tryToSaveConnectionAsIdleLocked")
+
+	connPool.poolFacade.putConnToLru(dc)
+	if _, ok := connPool.freeConn[dc]; ok {
+		panic("pool already contains such driver connection")
 	}
+
+	connPool.freeConn[dc] = struct{}{}
+	connPool.startCleanerLocked()
+	return true
 }

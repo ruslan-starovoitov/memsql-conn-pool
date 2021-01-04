@@ -198,12 +198,7 @@ func (connPoolFacade *ConnPoolFacade) isConnectionLimitExistsLocked() bool {
 	return 0 < connPoolFacade.totalMax
 }
 
-func (connPoolFacade *ConnPoolFacade) getConnectionsRequestedLocked() int {
-
-}
-
-//TODO это можно запускать в отдельной горутине
-func (connPoolFacade *ConnPoolFacade) closeLruIdleConnectionsLocked(numConnToClose int) {
+func (connPoolFacade *ConnPoolFacade) getNumOfConnRequestsLocked() int {
 
 }
 

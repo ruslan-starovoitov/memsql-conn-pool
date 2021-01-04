@@ -35,8 +35,9 @@ type ConnPool struct {
 	// connections in Stmt.css.
 	numClosed uint64
 
-	mu           sync.Mutex // protects following fields
-	freeConn     []*driverConn
+	mu sync.Mutex // protects following fields
+	//freeConn []*driverConn
+	freeConn     map[*driverConn]struct{}
 	connRequests map[uint64]chan connCreationResponse
 	//nextRequest  uint64 // Next key to use in connRequests.
 	//TODO numInUse + numIdle
@@ -48,10 +49,10 @@ type ConnPool struct {
 	// goroutine to exit.
 	openerCh chan struct{}
 
-	closed       bool //TODO возможно стоит убрать
-	dep          map[finalCloser]depSet
-	lastPut      map[*driverConn]string // stacktrace of last conn's put; debug only
-	maxIdleCount int                    // zero means defaultMaxIdleConns; negative means 0
+	closed  bool //TODO возможно стоит убрать
+	dep     map[finalCloser]depSet
+	lastPut map[*driverConn]string // stacktrace of last conn's put; debug only
+	//maxIdleCount int                    // zero means defaultMaxIdleConns; negative means 0
 	//TODO unlimited
 	//maxOpen           int                    // <= 0 means unlimited
 	maxLifetime time.Duration // maximum amount of time a connection may be reused
@@ -153,10 +154,21 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 	canUseIdleConnection := strategy == cachedOrNewConn && 0 < numFree
 	if canUseIdleConnection {
 		log.Print("ConnPool conn canUseIdleConnection")
+
+		var conn *driverConn
 		//remove idle connection from slice
-		conn := connPool.freeConn[0]
-		copy(connPool.freeConn, connPool.freeConn[1:])
-		connPool.freeConn = connPool.freeConn[:numFree-1]
+		for dc := range connPool.freeConn {
+			conn = dc
+		}
+
+		delete(connPool.freeConn, conn)
+
+		if conn == nil {
+			panic("Невозможно")
+		}
+		//conn := connPool.freeConn.
+		//copy(connPool.freeConn, connPool.freeConn[1:])
+		//connPool.freeConn = connPool.freeConn[:numFree-1]
 
 		//mark as isUse
 		conn.inUse = true
@@ -372,7 +384,7 @@ func (connPool *ConnPool) Close() error {
 	}
 	var err error
 	fns := make([]func() error, 0, len(connPool.freeConn))
-	for _, dc := range connPool.freeConn {
+	for dc := range connPool.freeConn {
 		fns = append(fns, dc.closeDBLocked())
 	}
 	connPool.freeConn = nil
@@ -394,18 +406,19 @@ func (connPool *ConnPool) Close() error {
 
 const defaultMaxIdleConns = 2
 
-func (connPool *ConnPool) maxIdleConnsLocked() int {
-	n := connPool.maxIdleCount
-	switch {
-	case n == 0:
-		// TODO(bradfitz): ask driver, if supported, for its default preference
-		return defaultMaxIdleConns
-	case n < 0:
-		return 0
-	default:
-		return n
-	}
-}
+//
+//func (connPool *ConnPool) maxIdleConnsLocked() int {
+//	n := connPool.maxIdleCount
+//	switch {
+//	case n == 0:
+//		// TODO(bradfitz): ask driver, if supported, for its default preference
+//		return defaultMaxIdleConns
+//	case n < 0:
+//		return 0
+//	default:
+//		return n
+//	}
+//}
 
 func (connPool *ConnPool) shortestIdleTimeLocked() time.Duration {
 	if connPool.maxIdleTime <= 0 {
@@ -420,4 +433,9 @@ func (connPool *ConnPool) shortestIdleTimeLocked() time.Duration {
 		min = connPool.maxLifetime
 	}
 	return min
+}
+
+func (connPool *ConnPool) removeConnFromFree(dc *driverConn) bool {
+	_, ok := connPool.freeConn[dc]
+	return ok
 }

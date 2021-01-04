@@ -41,17 +41,21 @@ func (connPoolFacade *ConnPoolFacade) maybeOpenNewConnections() {
 	connPoolFacade.mu.Lock()
 	defer connPoolFacade.mu.Unlock()
 
-	//how many connections id needed to open?
-	numConnectionsRequested := connPoolFacade.getConnectionsRequestedLocked()
+	//how many connections is needed to open?
+	numConnectionsRequested := connPoolFacade.getNumOfConnRequestsLocked()
 	limit := connPoolFacade.totalMax
 	numOpened := connPoolFacade.numOpened
 	numCanOpenConnections := limit - numOpened
 
 	//try to close idle connections if needed
-	numIdleConnsToClose := numCanOpenConnections < numConnectionsRequested
-	if numIdleConnsToClose {
-		numOfIdleConnectionNeededToClose := numConnectionsRequested - numCanOpenConnections
-		connPoolFacade.closeLruIdleConnectionsLocked(numOfIdleConnectionNeededToClose)
+	needToCloseIdleConns := numCanOpenConnections < numConnectionsRequested
+	if needToCloseIdleConns {
+		numIdleConnToClose := numConnectionsRequested - numCanOpenConnections
+		numOfIdleConn := connPoolFacade.lruCache.Len()
+		if numOfIdleConn < numIdleConnToClose {
+			numIdleConnToClose = numOfIdleConn
+		}
+		connPoolFacade.closeLruIdleConnectionsLocked(numIdleConnToClose)
 	}
 
 	//calculate max num of connections to open

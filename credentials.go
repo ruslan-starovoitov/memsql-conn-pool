@@ -1,5 +1,6 @@
 package cpool
 
+//TODO хранит уникальные данные об подключении
 type Credentials struct {
 	Username string
 	Password string

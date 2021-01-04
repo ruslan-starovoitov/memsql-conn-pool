@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	lru "github.com/hashicorp/golang-lru"
+	"log"
 	"sync"
 	"time"
 
@@ -185,9 +186,12 @@ func (pf *PoolFacade) getOrCreateConnPool(credentials Credentials) (*ConnPool, e
 	return nil, unableToGetPool
 }
 
-//TODO возможно нужен мьютекс
 func (pf *PoolFacade) isOpenConnectionLimitExceeded() bool {
-	return pf.totalMax <= pf.numOpen
+	pf.mu.Lock()
+	result := pf.totalMax <= pf.numOpen
+	log.Printf("PoolFacade isOpenConnectionLimitExceeded %v  %v  %v\n", result, pf.totalMax, pf.numOpen)
+	pf.mu.Unlock()
+	return result
 }
 
 func (pf *PoolFacade) isLimitExists() bool {

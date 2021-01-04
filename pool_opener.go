@@ -2,6 +2,7 @@ package cpool
 
 import (
 	"context"
+	"log"
 )
 
 //TODO создаёт новое соединение в контексте без проверок ограничений
@@ -11,8 +12,13 @@ func (pf *PoolFacade) connectionOpener(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			log.Println("PoolFacade connectionOpener ctx Done")
 			return
 		case connPool := <-pf.openerChannel:
+			stats := pf.Stats()
+			log.Printf("PoolFacade connectionOpener openerChannel stats = %v\n", stats)
+
+			log.Println("")
 			connPool.openNewConnection(ctx)
 		}
 	}
@@ -21,42 +27,55 @@ func (pf *PoolFacade) connectionOpener(ctx context.Context) {
 //TODO метод создаёт новое соединение/ вызывается из connectionOpener горутины
 // Open one new connection
 func (connPool *ConnPool) openNewConnection(ctx context.Context) {
+	log.Println("ConnPool openNewConnection")
+
 	// maybeOpenNewConnections has already executed connPool.numOpen++ before it sent
 	// on connPool.openerCh. This function must execute connPool.numOpen-- if the
 	// connection fails or is closed before returning.
-	ci, err := connPool.connector.Connect(ctx)
+
+	//TODO вызов внутренней функции драйвера mysql
+	// внутри происходит авторизация
+	// это создание нового соединения
+	// занимает много времени
+	conn, err := connPool.connector.Connect(ctx)
+
 	connPool.mu.Lock()
 	defer connPool.mu.Unlock()
+
 	if connPool.closed {
 		if err == nil {
-			ci.Close()
+			conn.Close()
 		}
 		//connPool.numOpen--
 		connPool.poolFacade.decrementNumOpened()
 		return
 	}
+
 	if err != nil {
 		//connPool.numOpen--
 		connPool.poolFacade.decrementNumOpened()
-		//TODO что это за ужас?
-		// какого черта вызывается с nil?
+		//TODO почему вызывается с nil?
 		connPool.putConnectionConnPoolLocked(nil, err)
 		//TODO странно / попытка открыть новые соединения
 		connPool.poolFacade.maybeOpenNewConnections()
 		return
 	}
+
 	dc := &driverConn{
 		connPool:   connPool,
 		createdAt:  nowFunc(),
 		returnedAt: nowFunc(),
-		ci:         ci,
+		ci:         conn,
 	}
+
 	if connPool.putConnectionConnPoolLocked(dc, err) {
+		log.Println("ConnPool openNewConnection putConnectionConnPoolLocked success")
 		connPool.addDepLocked(dc, dc)
 	} else {
+		log.Println("ConnPool openNewConnection putConnectionConnPoolLocked failure")
 		//connPool.numOpen--
 		connPool.poolFacade.decrementNumOpened()
-		ci.Close()
+		conn.Close()
 	}
 }
 
@@ -68,16 +87,18 @@ func (pf *PoolFacade) nextRequestKeyLocked() uint64 {
 	return next
 }
 
-// Вызывается при запросе нового канала/сохранения канала в список свободных/закрытии соединения
+// TODO Вызывается при запросе нового канала/сохранения канала в список свободных/закрытии соединения
 // Assumes poolFacade.mu is locked.
 // If there are connRequests and the connection limit hasn't been reached,
 // then tell the connectionOpener to open new connections.
 func (pf *PoolFacade) maybeOpenNewConnections() {
+	log.Println("maybeOpenNewConnections")
 	pf.mu.Lock()
+	defer pf.mu.Unlock()
 	numRequests := len(pf.connRequests)
 
 	//Существует ограничение
-	if pf.totalMax > 0 {
+	if pf.isLimitExists() {
 		numCanOpen := pf.totalMax - pf.numOpen
 		if numCanOpen < numRequests {
 			numRequests = numCanOpen
@@ -91,7 +112,9 @@ func (pf *PoolFacade) maybeOpenNewConnections() {
 		}
 
 		//Дать команду создать соединение для конкретного пула
+		log.Println("maybeOpenNewConnections before openerChannel ")
 		pf.openerChannel <- value.connPool
+		log.Println("maybeOpenNewConnections after openerChannel ")
 
 		numRequests--
 		if numRequests == 0 {
@@ -99,5 +122,4 @@ func (pf *PoolFacade) maybeOpenNewConnections() {
 		}
 	}
 
-	pf.mu.Unlock()
 }

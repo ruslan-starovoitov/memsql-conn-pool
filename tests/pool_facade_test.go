@@ -162,7 +162,7 @@ func TestConnectionReuseInSequentialRequests(t *testing.T) {
 
 			//execute sequential requests
 			for i := 0; i < 5; i++ {
-				testCase.function(1, user4Db2Credentials, pm)
+				testCase.function(time.Second, user4Db2Credentials, pm)
 			}
 
 			time.Sleep(time.Second * 2)
@@ -201,7 +201,7 @@ func TestStatsOneConnectionExec(t *testing.T) {
 			var wg sync.WaitGroup
 			wg.Add(1)
 			//run query to database
-			go testCase.function(1, user5Db2Credentials, &wg, pm)
+			go testCase.function(time.Second, user5Db2Credentials, &wg, pm)
 
 			wg.Wait()
 
@@ -319,7 +319,7 @@ func TestExceedingConnectionLimit(t *testing.T) {
 
 	//заполнить пул запросами
 	//make connectionLimit*2 queries
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 20; i++ {
 		wg.Add(1)
 		go execSleepWait(queryExecutionDuration, user4Db2Credentials, &wg, pm)
 	}
@@ -372,7 +372,7 @@ func TestConnectionLifetimeNotExceeded(t *testing.T) {
 	defer pm.Close()
 
 	// exec
-	execSleep(1, user5Db2Credentials, pm)
+	execSleep(time.Second, user5Db2Credentials, pm)
 
 	// no sleep
 	//time.Sleep(2*time.Second)

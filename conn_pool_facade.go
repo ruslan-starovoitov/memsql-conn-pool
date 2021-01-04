@@ -207,11 +207,17 @@ func (connPoolFacade *ConnPoolFacade) getConnPoolsThatHaveRequestedNewConnection
 	}
 
 	log.Printf("connectionsNum = %v\n", connectionsNum)
+
+	log.Printf("facade wait count = %v\n", connPoolFacade.waitCount)
 	var slice []*ConnPool
 	connectionRemaining := connectionsNum
+
+	log.Printf("len of pools %v", connPoolFacade.pools.Count())
 	//пройтись по пулам
 	for tuple := range connPoolFacade.pools.IterBuffered() {
 		connPool, ok := tuple.Val.(*ConnPool)
+		log.Printf("conn pool wait count = %v\n", connPool.waitCount)
+
 		if !ok {
 			panic("В словаре пулов лежит структура неизвестного типа.")
 		}

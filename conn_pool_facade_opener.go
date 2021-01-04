@@ -23,6 +23,10 @@ func (connPoolFacade *ConnPoolFacade) connectionOpener(ctx context.Context) {
 	}
 }
 
+func (connPoolFacade *ConnPoolFacade) getNumCanOpenConnectionsLocked() int {
+	return connPoolFacade.totalMax - connPoolFacade.numOpened
+}
+
 // TODO Даёт команду открыть новые соединения если нужно.
 //  Если лимит превышен, то попытается закрыть idle соединения.
 // If there are connRequests and the connection limit hasn't been reached,
@@ -35,23 +39,19 @@ func (connPoolFacade *ConnPoolFacade) maybeOpenNewConnections() {
 
 	//how many connections is needed to open?
 	numConnectionsRequested := connPoolFacade.getNumOfConnRequestsLocked()
-	limit := connPoolFacade.totalMax
-	numOpened := connPoolFacade.numOpened
-	numCanOpenConnections := limit - numOpened
+	numCanOpenConnections := connPoolFacade.getNumCanOpenConnectionsLocked()
 
 	//try to close idle connections if needed
 	isNeedToCloseIdleConns := numCanOpenConnections < numConnectionsRequested
 	if isNeedToCloseIdleConns {
 		numIdleConnToClose := numConnectionsRequested - numCanOpenConnections
-		numOfIdleConn := connPoolFacade.lruCache.Len()
-		if numOfIdleConn < numIdleConnToClose {
-			numIdleConnToClose = numOfIdleConn
-		}
-		connPoolFacade.closeLruIdleConnectionsLocked(numIdleConnToClose)
+		connPoolFacade.maybeCloseIdleConn(numIdleConnToClose)
+		//update num of can open
+		numCanOpenConnections = connPoolFacade.getNumCanOpenConnectionsLocked()
 	}
 
 	//calculate max num of connections to open
-	numOfNewConnections := limit - connPoolFacade.numOpened
+	numOfNewConnections := min(numConnectionsRequested, numCanOpenConnections)
 	connPoolsToCreateNewConnections := connPoolFacade.getConnPoolsThatHaveRequestedNewConnections(numOfNewConnections)
 
 	//open new connections

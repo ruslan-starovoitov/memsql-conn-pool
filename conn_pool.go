@@ -215,8 +215,16 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		connPool.poolFacade.waitCount++
 		connPool.poolFacade.mu.Unlock()
 
+		connPool.mu.Lock()
 		connPool.waitCount++
 		connPool.mu.Unlock()
+
+		defer func() {
+			log.Println("strange defer")
+			connPool.mu.Lock()
+			connPool.waitCount--
+			connPool.mu.Unlock()
+		}()
 
 		waitStart := nowFunc()
 

@@ -1,5 +1,16 @@
 package cpool
 
+import "log"
+
+func (connPoolFacade *ConnPoolFacade) maybeCloseIdleConn(numIdleConnToClose int) {
+	numOfIdleConn := connPoolFacade.lruCache.Len()
+	log.Printf("num of idle conns = %v\n", numOfIdleConn)
+	if numOfIdleConn < numIdleConnToClose {
+		numIdleConnToClose = numOfIdleConn
+	}
+	connPoolFacade.closeLruIdleConnectionsLocked(numIdleConnToClose)
+}
+
 //TODO это можно запускать в отдельной горутине
 //closeLruIdleConnectionsLocked пытается закрыть numConnToClose соединений
 func (connPoolFacade *ConnPoolFacade) closeLruIdleConnectionsLocked(numConnToClose int) {

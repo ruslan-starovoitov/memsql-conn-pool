@@ -123,6 +123,9 @@ func (connPool *ConnPool) returnConnectionOnRequestLocked(dc *driverConn, err er
 	var requestKey uint64
 	var requestChan chan connCreationResponse
 
+	if len(connPool.connRequests) == 0 {
+		panic("return connection to nil")
+	}
 	//get one request
 	for key, value := range connPool.connRequests {
 		requestKey = key
@@ -131,6 +134,7 @@ func (connPool *ConnPool) returnConnectionOnRequestLocked(dc *driverConn, err er
 	}
 
 	if requestChan == nil {
+		log.Printf("len of connPool.connRequests is %v\n", len(connPool.connRequests))
 		panic("requestChan is nil. probably there is no lock or request created in incorrect way")
 		return false
 	}

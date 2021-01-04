@@ -26,10 +26,11 @@ func OpenDB(c driver.Connector) *ConnPool {
 	//ctx, cancel := context.WithCancel(context.Background())
 	_, cancel := context.WithCancel(context.Background())
 	connPool := &ConnPool{
-		connector: c,
-		freeConn:  make(map[*driverConn]struct{}),
-		openerCh:  make(chan struct{}, connectionRequestQueueSize),
-		lastPut:   make(map[*driverConn]string),
+		connector:    c,
+		freeConn:     make(map[*driverConn]struct{}),
+		openerCh:     make(chan struct{}, connectionRequestQueueSize),
+		lastPut:      make(map[*driverConn]string),
+		connRequests: make(map[uint64]chan connCreationResponse),
 		//TODO добавить установку менеджера пулов
 		//connRequests: make(map[uint64]chan connCreationResponse),
 		stop: cancel,

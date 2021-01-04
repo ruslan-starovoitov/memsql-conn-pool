@@ -156,7 +156,7 @@ func (dc *driverConn) finalClose() error {
 	})
 
 	dc.connPool.mu.Lock()
-	//dc.connPool.numOpen--
+	//dc.connPool.numOpened--
 	dc.connPool.poolFacade.decrementNumOpened()
 	//TODO попытка открыть новые соединения
 	dc.connPool.poolFacade.maybeOpenNewConnections()

@@ -23,7 +23,7 @@ import (
 // connection is returned to ConnPool's idle connection pool. The pool size
 // can be controlled with SetMaxIdleConns.
 type ConnPool struct {
-	poolFacade *PoolFacade
+	poolFacade *ConnPoolFacade
 
 	// Atomic access only. At top of struct to prevent mis-alignment
 	// on 32-bit platforms. Of type time.Duration.
@@ -35,9 +35,9 @@ type ConnPool struct {
 	// connections in Stmt.css.
 	numClosed uint64
 
-	mu       sync.Mutex // protects following fields
-	freeConn []*driverConn
-	//connRequests map[uint64]chan connCreationResponse
+	mu           sync.Mutex // protects following fields
+	freeConn     []*driverConn
+	connRequests map[uint64]chan connCreationResponse
 	//nextRequest  uint64 // Next key to use in connRequests.
 	//TODO numInUse + numIdle
 	numOpen int // number of opened and pending open connections
@@ -57,13 +57,67 @@ type ConnPool struct {
 	maxLifetime time.Duration // maximum amount of time a connection may be reused
 	maxIdleTime time.Duration // maximum amount of time a connection may be idle before being closed
 
-	cleanerCh chan struct{} //TODO что это maxLifetime was changed or connPool was closed.
-	//waitCount         int64 // Total number of connections waited for.
-	maxIdleClosed     int64 // Total number of connections closed due to idle count.
-	maxIdleTimeClosed int64 // Total number of connections closed due to idle time.
-	maxLifetimeClosed int64 // Total number of connections closed due to max connection lifetime limit.
+	cleanerCh         chan struct{} //TODO что это maxLifetime was changed or connPool was closed.
+	waitCount         int64         // Total number of connections waited for.
+	maxIdleClosed     int64         // Total number of connections closed due to idle count.
+	maxIdleTimeClosed int64         // Total number of connections closed due to idle time.
+	maxLifetimeClosed int64         // Total number of connections closed due to max connection lifetime limit.
 
 	stop func() // stop cancels the connection opener.
+}
+
+//TODO метод создаёт новое соединение и вызывает put
+// Open one new connection
+func (connPool *ConnPool) openNewConnection(ctx context.Context) {
+	log.Println("ConnPool openNewConnection")
+
+	// maybeOpenNewConnections has already executed connPool.numOpened++ before it sent
+	// on connPool.openerCh. This function must execute connPool.numOpened-- if the
+	// connection fails or is closed before returning.
+
+	//TODO вызов внутренней функции драйвера mysql
+	// внутри происходит авторизация
+	// это создание нового соединения
+	// занимает много времени
+	conn, err := connPool.connector.Connect(ctx)
+
+	connPool.mu.Lock()
+	defer connPool.mu.Unlock()
+
+	if connPool.closed {
+		if err == nil {
+			conn.Close()
+		}
+		//connPool.numOpened--
+		connPool.poolFacade.decrementNumOpened()
+		return
+	}
+
+	if err != nil {
+		//connPool.numOpened--
+		connPool.poolFacade.decrementNumOpened()
+		//TODO почему вызывается с nil?
+		connPool.putConnectionConnPoolLocked(nil, err)
+		connPool.poolFacade.maybeOpenNewConnections()
+		return
+	}
+
+	dc := &driverConn{
+		connPool:   connPool,
+		createdAt:  nowFunc(),
+		returnedAt: nowFunc(),
+		ci:         conn,
+	}
+
+	if connPool.putConnectionConnPoolLocked(dc, err) {
+		log.Println("ConnPool openNewConnection putConnectionConnPoolLocked success")
+		connPool.addDepLocked(dc, dc)
+	} else {
+		log.Println("ConnPool openNewConnection putConnectionConnPoolLocked failure")
+		//connPool.numOpened--
+		connPool.poolFacade.decrementNumOpened()
+		conn.Close()
+	}
 }
 
 //TODO если можно достёт соединение из кеша
@@ -210,14 +264,14 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 	}
 
 	connPool.poolFacade.incrementNumOpened() // optimistically
-	//connPool.numOpen++
+	//connPool.numOpened++
 
 	//Создание нового соединения
 	ci, err := connPool.connector.Connect(ctx)
 
 	if err != nil {
 		connPool.poolFacade.decrementNumOpened()
-		//connPool.numOpen-- // correct for earlier optimism
+		//connPool.numOpened-- // correct for earlier optimism
 		//TODO попытка открыть новые соединения
 		connPool.poolFacade.maybeOpenNewConnections()
 		return nil, err

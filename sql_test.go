@@ -2158,23 +2158,23 @@ func TestSimultaneousQueries(t *testing.T) {
 // 		t.Fatalf("connPool open conn fail: %v", err)
 // 	}
 
-// 	if g, w := db.numOpen, 3; g != w {
+// 	if g, w := db.numOpened, 3; g != w {
 // 		t.Errorf("free conns = %d; want %d", g, w)
 // 	}
 
 // 	db.SetMaxOpenConns(2)
-// 	if g, w := db.numOpen, 3; g != w {
+// 	if g, w := db.numOpened, 3; g != w {
 // 		t.Errorf("free conns = %d; want %d", g, w)
 // 	}
 
 // 	conn0.releaseConn(nil)
 // 	conn1.releaseConn(nil)
-// 	if g, w := db.numOpen, 2; g != w {
+// 	if g, w := db.numOpened, 2; g != w {
 // 		t.Errorf("free conns = %d; want %d", g, w)
 // 	}
 
 // 	conn2.releaseConn(nil)
-// 	if g, w := db.numOpen, 2; g != w {
+// 	if g, w := db.numOpened, 2; g != w {
 // 		t.Errorf("free conns = %d; want %d", g, w)
 // 	}
 // }
@@ -2250,13 +2250,13 @@ func TestSimultaneousQueries(t *testing.T) {
 // 		select {
 // 		case <-tick.C:
 // 			db.mu.Lock()
-// 			if db.numOpen == 0 {
+// 			if db.numOpened == 0 {
 // 				db.mu.Unlock()
 // 				return
 // 			}
 // 			db.mu.Unlock()
 // 		case <-to.C:
-// 			// Closing the database will check for numOpen and fail the test.
+// 			// Closing the database will check for numOpened and fail the test.
 // 			return
 // 		}
 // 	}
@@ -2629,8 +2629,8 @@ func TestRowsImplicitClose(t *testing.T) {
 
 // 		db.mu.Lock()
 // 		defer db.mu.Unlock()
-// 		if db.numOpen != nconn {
-// 			t.Fatalf("unexpected numOpen %d (was expecting %d)", db.numOpen, nconn)
+// 		if db.numOpened != nconn {
+// 			t.Fatalf("unexpected numOpened %d (was expecting %d)", db.numOpened, nconn)
 // 		} else if len(db.freeConn) != nconn {
 // 			t.Fatalf("unexpected len(connPool.freeConn) %d (was expecting %d)", len(db.freeConn), nconn)
 // 		}
@@ -3118,7 +3118,7 @@ func TestErrBadConnReconnect(t *testing.T) {
 
 // 	simulateBadConn := func(name string, hook *func() bool, op func() error) {
 // 		broken := false
-// 		numOpen := db.numOpen
+// 		numOpened := db.numOpened
 
 // 		*hook = func() bool {
 // 			if !broken {
@@ -3137,8 +3137,8 @@ func TestErrBadConnReconnect(t *testing.T) {
 // 		}
 // 		*hook = nil
 
-// 		if numOpen != db.numOpen {
-// 			t.Errorf(name+": leaked %d connection(s)!", db.numOpen-numOpen)
+// 		if numOpened != db.numOpened {
+// 			t.Errorf(name+": leaked %d connection(s)!", db.numOpened-numOpened)
 // 		}
 // 	}
 

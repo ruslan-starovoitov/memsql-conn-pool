@@ -4,8 +4,8 @@ import "time"
 
 // startCleanerLocked starts connectionCleaner if needed.
 func (connPool *ConnPool) startCleanerLocked() {
-	if (connPool.maxLifetime > 0 || connPool.maxIdleTime > 0) &&
-		//connPool.numOpen > 0 &&
+	if (0 < connPool.maxLifetime || 0 < connPool.maxIdleTime) &&
+		//connPool.numOpened > 0 &&
 		connPool.cleanerCh == nil {
 		connPool.cleanerCh = make(chan struct{}, 1)
 		go connPool.connectionCleaner(connPool.shortestIdleTimeLocked())
@@ -18,11 +18,11 @@ func (connPool *ConnPool) connectionCleaner(duration time.Duration) {
 	if duration < minInterval {
 		duration = minInterval
 	}
-	t := time.NewTimer(duration)
+	timer := time.NewTimer(duration)
 
 	for {
 		select {
-		case <-t.C:
+		case <-timer.C:
 		case <-connPool.cleanerCh: // maxLifetime was changed or connPool was closed.
 		}
 
@@ -30,7 +30,7 @@ func (connPool *ConnPool) connectionCleaner(duration time.Duration) {
 
 		duration = connPool.shortestIdleTimeLocked()
 		if connPool.closed ||
-			//connPool.numOpen == 0 ||
+			//connPool.numOpened == 0 ||
 			duration <= 0 {
 			connPool.cleanerCh = nil
 			connPool.mu.Unlock()
@@ -46,7 +46,7 @@ func (connPool *ConnPool) connectionCleaner(duration time.Duration) {
 		if duration < minInterval {
 			duration = minInterval
 		}
-		t.Reset(duration)
+		timer.Reset(duration)
 	}
 }
 

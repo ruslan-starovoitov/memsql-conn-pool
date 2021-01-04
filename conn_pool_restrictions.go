@@ -88,21 +88,22 @@ import "time"
 //
 // Expired connections may be closed lazily before reuse.
 //
-// If d <= 0, connections are not closed due to a connection's idle time.
-func (connPool *ConnPool) SetConnMaxIdleTime(d time.Duration) {
-	if d < 0 {
-		d = 0
+// If duration <= 0, connections are not closed due to a connection's idle time.
+func (connPool *ConnPool) SetConnMaxIdleTime(duration time.Duration) {
+	if duration < 0 {
+		duration = 0
 	}
 	connPool.mu.Lock()
 	defer connPool.mu.Unlock()
 
 	// Wake cleaner up when idle time is shortened.
-	if d > 0 && d < connPool.maxIdleTime && connPool.cleanerCh != nil {
+	limitExists := 0 < duration
+	if limitExists && duration < connPool.maxIdleTime && connPool.cleanerCh != nil {
 		select {
 		case connPool.cleanerCh <- struct{}{}:
 		default:
 		}
 	}
-	connPool.maxIdleTime = d
+	connPool.maxIdleTime = duration
 	connPool.startCleanerLocked()
 }

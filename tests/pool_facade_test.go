@@ -143,12 +143,12 @@ func TestConnectionReuseInSequentialRequests(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		function func(delay time.Duration, cr cpool.Credentials, facade *cpool.PoolFacade)
+		function func(delay time.Duration, cr cpool.Credentials, facade *cpool.ConnPoolFacade)
 	}{
 		{"exec", execSleep},
 		{"query", querySleep},
 		{"queryRow", queryRowSleep},
-		{"exec and query", func(delay time.Duration, cr cpool.Credentials, pf *cpool.PoolFacade) {
+		{"exec and query", func(delay time.Duration, cr cpool.Credentials, pf *cpool.ConnPoolFacade) {
 			execSleep(delay, cr, pf)
 			querySleep(delay, cr, pf)
 		}},
@@ -184,12 +184,12 @@ func TestStatsOneConnectionExec(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		function func(delay time.Duration, cr cpool.Credentials, group *sync.WaitGroup, facade *cpool.PoolFacade)
+		function func(delay time.Duration, cr cpool.Credentials, group *sync.WaitGroup, facade *cpool.ConnPoolFacade)
 	}{
 		{"exec", execSleepWait},
 		{"query", querySleepWait},
 		{"queryRow", queryRowSleepWait},
-		{"exec and query", func(delay time.Duration, cr cpool.Credentials, wg *sync.WaitGroup, pf *cpool.PoolFacade) {
+		{"exec and query", func(delay time.Duration, cr cpool.Credentials, wg *sync.WaitGroup, pf *cpool.ConnPoolFacade) {
 			execSleepWait(delay, cr, wg, pf)
 			querySleepWait(delay, cr, wg, pf)
 		}},

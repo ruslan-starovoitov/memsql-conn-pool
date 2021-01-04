@@ -9,13 +9,13 @@ package cpool
 //func (connPool *ConnPool) maybeOpenNewConnectionsLocked() {
 //	numRequests := len(connPool.connRequests)
 //	if connPool.maxOpen > 0 {
-//		numCanOpen := connPool.maxOpen - connPool.numOpen
+//		numCanOpen := connPool.maxOpen - connPool.numOpened
 //		if numCanOpen < numRequests {
 //			numRequests = numCanOpen
 //		}
 //	}
 //	for numRequests > 0 {
-//		connPool.numOpen++ // optimistically
+//		connPool.numOpened++ // optimistically
 //		numRequests--
 //		if connPool.closed {
 //			return

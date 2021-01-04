@@ -34,9 +34,9 @@ func (connPool *ConnPool) Stats() ConnPoolStats {
 		//MaxOpenConnections: connPool.maxOpen,
 
 		Idle: len(connPool.freeConn),
-		//OpenConnections: connPool.numOpen,
+		//OpenConnections: connPool.numOpened,
 		//TODO добавить подсчёт InUse
-		//InUse:           connPool.numOpen - len(connPool.freeConn),
+		//InUse:           connPool.numOpened - len(connPool.freeConn),
 
 		//WaitCount:         connPool.waitCount,
 		WaitDuration:      time.Duration(wait),

@@ -105,7 +105,7 @@ func (connPool *ConnPool) putConnectionConnPoolLocked(dc *driverConn, err error)
 		return false
 	}
 
-	if connPool.poolFacade.isFreeConnectionsNeeded() {
+	if connPool.isFreeConnectionsNeededLocked() {
 		return connPool.returnConnectionOnRequest(dc, err)
 	} else if err == nil && !connPool.closed {
 		//TODO добавить соединение в lru cache
@@ -114,16 +114,19 @@ func (connPool *ConnPool) putConnectionConnPoolLocked(dc *driverConn, err error)
 	return false
 }
 
+func (connPool *ConnPool) isFreeConnectionsNeededLocked() bool {
+	return 0 < connPool.waitCount
+}
+
 func (connPool *ConnPool) returnConnectionOnRequest(dc *driverConn, err error) bool {
 	log.Println("conn pool returnConnectionOnRequest")
 	var requestKey uint64
 	var requestChan chan connCreationResponse
 
-	connPool.poolFacade.mu.Lock()
 	//get one request
-	for key, value := range connPool.poolFacade.connRequests {
+	for key, value := range connPool.connRequests {
 		requestKey = key
-		requestChan = value.responce
+		requestChan = value
 		break
 	}
 
@@ -132,12 +135,12 @@ func (connPool *ConnPool) returnConnectionOnRequest(dc *driverConn, err error) b
 		return false
 	}
 
-	delete(connPool.poolFacade.connRequests, requestKey) // Remove from pending requests.
+	delete(connPool.connRequests, requestKey) // Remove from pending requests.
 
-	connPool.poolFacade.mu.Unlock()
 	if err == nil {
 		dc.inUse = true
 	}
+
 	//TODO в чем смысл сохранять соединения с ошибками?
 	requestChan <- connCreationResponse{
 		conn: dc,

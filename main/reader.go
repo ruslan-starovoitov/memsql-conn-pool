@@ -9,7 +9,7 @@ import (
 type reader struct {
 }
 
-func (reader) Read(credentials cpool.Credentials, connPool *cpool.PoolFacade, group *sync.WaitGroup) {
+func (reader) Read(credentials cpool.Credentials, connPool *cpool.ConnPoolFacade, group *sync.WaitGroup) {
 	rows, err := connPool.Query(credentials, "select count(*) from test")
 	if err != nil {
 		println(err)

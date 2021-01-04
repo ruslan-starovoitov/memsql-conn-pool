@@ -9,24 +9,24 @@ import (
 
 //TODO add comments
 
-func execSleepWait(delay time.Duration, credentials cpool.Credentials, wg *sync.WaitGroup, pm *cpool.PoolFacade) {
+func execSleepWait(delay time.Duration, credentials cpool.Credentials, wg *sync.WaitGroup, pm *cpool.ConnPoolFacade) {
 	execSleep(delay, credentials, pm)
 	wg.Done()
 }
 
-func execSleep(delay time.Duration, credentials cpool.Credentials, pm *cpool.PoolFacade) {
+func execSleep(delay time.Duration, credentials cpool.Credentials, pm *cpool.ConnPoolFacade) {
 	_, err := pm.Exec(credentials, fmt.Sprintf("select sleep(%v)", delay.Seconds()))
 	if err != nil {
 		panic(err)
 	}
 }
 
-func querySleepWait(delay time.Duration, credentials cpool.Credentials, wg *sync.WaitGroup, poolFacade *cpool.PoolFacade) {
+func querySleepWait(delay time.Duration, credentials cpool.Credentials, wg *sync.WaitGroup, poolFacade *cpool.ConnPoolFacade) {
 	querySleep(delay, credentials, poolFacade)
 	wg.Done()
 }
 
-func querySleep(delay time.Duration, credentials cpool.Credentials, pm *cpool.PoolFacade) {
+func querySleep(delay time.Duration, credentials cpool.Credentials, pm *cpool.ConnPoolFacade) {
 	rows, err := pm.Query(credentials, fmt.Sprintf("select sleep(%v)", delay.Seconds()))
 	if err != nil {
 		panic(err)
@@ -37,12 +37,12 @@ func querySleep(delay time.Duration, credentials cpool.Credentials, pm *cpool.Po
 	}
 }
 
-func queryRowSleepWait(delay time.Duration, credentials cpool.Credentials, wg *sync.WaitGroup, poolFacade *cpool.PoolFacade) {
+func queryRowSleepWait(delay time.Duration, credentials cpool.Credentials, wg *sync.WaitGroup, poolFacade *cpool.ConnPoolFacade) {
 	queryRowSleep(delay, credentials, poolFacade)
 	wg.Done()
 }
 
-func queryRowSleep(delay time.Duration, credentials cpool.Credentials, pm *cpool.PoolFacade) {
+func queryRowSleep(delay time.Duration, credentials cpool.Credentials, pm *cpool.ConnPoolFacade) {
 	row, err := pm.QueryRow(credentials, fmt.Sprintf("select sleep(%v)", delay.Seconds()))
 	if err != nil {
 		panic(err)

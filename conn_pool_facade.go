@@ -183,10 +183,10 @@ func (connPoolFacade *ConnPoolFacade) getOrCreateConnPool(credentials Credential
 	return nil, unableToGetPool
 }
 
-func (connPoolFacade *ConnPoolFacade) isOpenConnectionLimitExceeded() bool {
+func (connPoolFacade *ConnPoolFacade) isConnLimitExceeded() bool {
 	connPoolFacade.mu.Lock()
-	result := connPoolFacade.totalMax <= connPoolFacade.numOpened
-	log.Printf("ConnPoolFacade isOpenConnectionLimitExceeded %v  %v  %v\n", result, connPoolFacade.totalMax, connPoolFacade.numOpened)
+	result := connPoolFacade.totalMax < connPoolFacade.numOpened
+	log.Printf("ConnPoolFacade isConnLimitExceeded %v, limit = %v, numOpened =   %v \n", result, connPoolFacade.totalMax, connPoolFacade.numOpened)
 	connPoolFacade.mu.Unlock()
 	return result
 }

@@ -141,39 +141,42 @@ func TestExecFailureCloseBefore(t *testing.T) {
 func TestConnectionReuseInSequentialRequests(t *testing.T) {
 	t.Parallel()
 
+	numberOfRepetitions := 100
 	testCases := []struct {
 		name     string
 		function func(delay time.Duration, cr cpool.Credentials, facade *cpool.ConnPoolFacade)
 	}{
-		{"exec", execSleep},
+		//{"exec", execSleep},
 		{"query", querySleep},
-		{"queryRow", queryRowSleep},
-		{"exec and query", func(delay time.Duration, cr cpool.Credentials, pf *cpool.ConnPoolFacade) {
-			execSleep(delay, cr, pf)
-			querySleep(delay, cr, pf)
-		}},
+		//{"queryRow", queryRowSleep},
+		//{"exec and query", func(delay time.Duration, cr cpool.Credentials, pf *cpool.ConnPoolFacade) {
+		//	execSleep(delay, cr, pf)
+		//	querySleep(delay, cr, pf)
+		//}},
 	}
 	const connectionLimit = 100
 
 	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			poolFacade := cpool.NewPoolFacade("mysql", connectionLimit, time.Minute)
-			defer poolFacade.Close()
+		for i := 0; i < numberOfRepetitions; i++ {
+			t.Run(testCase.name, func(t *testing.T) {
+				poolFacade := cpool.NewPoolFacade("mysql", connectionLimit, time.Minute)
+				defer poolFacade.Close()
 
-			//execute sequential requests
-			for i := 0; i < 5; i++ {
-				testCase.function(time.Second, user4Db2Credentials, poolFacade)
-			}
+				//execute sequential requests
+				for i := 0; i < 5; i++ {
+					testCase.function(time.Second, user4Db2Credentials, poolFacade)
+				}
 
-			time.Sleep(time.Second * 2)
+				time.Sleep(time.Second * 2)
 
-			//check that only one connection was created
-			stats := poolFacade.Stats()
-			assert.Equal(t, 1, stats.NumUniqueDSNs, "number of unique dsn")
-			assert.Equal(t, connectionLimit, stats.TotalMax, "total max")
-			assert.Equal(t, 1, stats.NumIdle, "num idle")
-			assert.Equal(t, 0, stats.NumOpen, "num open")
-		})
+				//check that only one connection was created
+				stats := poolFacade.Stats()
+				assert.Equal(t, 1, stats.NumUniqueDSNs, "number of unique dsn")
+				assert.Equal(t, connectionLimit, stats.TotalMax, "total max")
+				assert.Equal(t, 1, stats.NumIdle, "num idle")
+				assert.Equal(t, 0, stats.NumOpen, "num open")
+			})
+		}
 	}
 	log.Print("log ended")
 }
@@ -478,6 +481,8 @@ func TestConnPoolFacadeCloseIdleConnIfLimitExceeded(t *testing.T) {
 //проверить, что закроет старое простаивающее соединение
 func TestSimpleConnectionStatsCheck(t *testing.T) {
 	t.Parallel()
+
+	log.Println("TEST START")
 
 	// Create pool
 	connectionLimit := 1

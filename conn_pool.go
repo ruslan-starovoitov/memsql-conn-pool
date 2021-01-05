@@ -128,9 +128,9 @@ func (connPool *ConnPool) openNewConnection(ctx context.Context) {
 // conn returns a newly-opened or cached *driverConn.
 func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn, error) {
 	log.Print("ConnPool conn")
-	// Check if the context is closed.
 	connPool.mu.Lock()
 
+	// Check if the context is closed.
 	if connPool.closed {
 		log.Print("ConnPool conn is closed")
 		connPool.mu.Unlock()
@@ -197,8 +197,8 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 
 	connPool.mu.Unlock()
 
-	if connPool.poolFacade.isOpenConnectionLimitExceeded() {
-		log.Print("ConnPool conn isOpenConnectionLimitExceeded")
+	if connPool.poolFacade.isConnLimitExceeded() {
+		log.Print("ConnPool conn isConnLimitExceeded")
 		// TODO try to remove idle connection from another connection pool and
 		//  wait for free connection
 
@@ -282,16 +282,18 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 			return ret.conn, ret.err
 		}
 	} else {
-		log.Print("ConnPool conn not isOpenConnectionLimitExceeded")
+		log.Print("ConnPool conn not isConnLimitExceeded")
 	}
 
 	connPool.poolFacade.incrementNumOpened() // optimistically
 	//connPool.numOpened++
 
 	//Создание нового соединения
+	log.Print("ConnPool conn creating a new pool")
 	ci, err := connPool.connector.Connect(ctx)
 
 	if err != nil {
+		log.Printf("ConnPool conn creating a new pool with error %s", err.Error())
 		connPool.poolFacade.decrementNumOpened()
 		//connPool.numOpened-- // correct for earlier optimism
 		//TODO попытка открыть новые соединения

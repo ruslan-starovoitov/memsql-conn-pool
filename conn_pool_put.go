@@ -36,11 +36,11 @@ func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) 
 		}
 		panic("sql: connection returned that was never out")
 	} else {
-		log.Println("ConnPool putConn dc.inUse")
+		log.Println("ConnPool putConn dc.inUse ok")
 	}
 
 	if err != driver.ErrBadConn && dc.expired(connPool.maxLifetime) {
-		log.Println("closing connection due to expiration")
+		log.Println("ConnPool putConn closing connection due to expiration")
 		connPool.maxLifetimeClosed++
 		err = driver.ErrBadConn
 	}
@@ -52,7 +52,7 @@ func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) 
 	dc.returnedAt = nowFunc()
 
 	for _, fn := range dc.onPut {
-		log.Println("call on put handlers")
+		log.Println("ConnPool putConn call on put handlers")
 		fn()
 	}
 	dc.onPut = nil
@@ -75,9 +75,8 @@ func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) 
 	added := connPool.putConnectionConnPoolLocked(dc, nil)
 	connPool.mu.Unlock()
 
-	log.Println("ConnPool putConn 8")
 	if !added {
-		log.Println("ConnPool putConn 9")
+		log.Println("warning ConnPool putConn connection is not added to free connections")
 		dc.Close()
 		return
 	}
@@ -100,12 +99,15 @@ func (connPool *ConnPool) putConnectionConnPoolLocked(dc *driverConn, err error)
 	log.Println("connPool putConnectionConnPoolLocked")
 
 	if connPool.closed {
+		log.Println("connPool putConnectionConnPoolLocked connection pool closed")
 		return false
 	}
-	if connPool.poolFacade.isOpenConnectionLimitExceeded() {
-		log.Println("warning connPool putConnectionConnPoolLocked")
+
+	if connPool.poolFacade.isConnLimitExceeded() {
+		log.Println("connPool putConnectionConnPoolLocked isConnLimitExceeded")
 		return false
 	}
+
 	if connPool.isFreeConnectionsNeededLocked() {
 		return connPool.returnConnectionOnRequestLocked(dc, err)
 	} else if err == nil && !connPool.closed {

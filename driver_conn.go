@@ -4,6 +4,7 @@ import (
 	"context"
 	"cpool/driver"
 	"errors"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -134,6 +135,7 @@ func (dc *driverConn) Close() error {
 
 //TODO изучить / закрытие соединения
 func (dc *driverConn) finalClose() error {
+	log.Println("warning final close")
 	var err error
 
 	// Each *driverStmt has a lock to the dc. Copy the list out of the dc

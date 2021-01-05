@@ -29,7 +29,7 @@ func (connPoolFacade *ConnPoolFacade) Stats() PoolFacadeStats {
 	numIdle := 0
 	index := 0
 
-	log.Println("stats iterating through pools")
+	log.Printf("stats iterating through pools. pools count = %v\n", connPoolFacade.pools.Count())
 	for tuple := range connPoolFacade.pools.IterBuffered() {
 		index++
 		connPool := tuple.Val.(*ConnPool)
@@ -37,15 +37,13 @@ func (connPoolFacade *ConnPoolFacade) Stats() PoolFacadeStats {
 		log.Printf("stats iterating through pools index=%v\n", index)
 
 		log.Println("before lock")
-		//connPool.mu.state
 		connPool.mu.Lock()
-		log.Println("lock")
+		log.Println("after lock")
 		numIdle += len(connPool.freeConn)
 		connPool.mu.Unlock()
-		log.Println("unlock")
+		log.Println("after unlock")
 
 	}
-	log.Println("stats after loop")
 
 	connPoolFacade.mu.Lock()
 

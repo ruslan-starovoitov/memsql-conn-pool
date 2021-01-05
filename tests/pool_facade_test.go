@@ -141,18 +141,18 @@ func TestExecFailureCloseBefore(t *testing.T) {
 func TestConnectionReuseInSequentialRequests(t *testing.T) {
 	t.Parallel()
 
-	numberOfRepetitions := 100
+	numberOfRepetitions := 1
 	testCases := []struct {
 		name     string
 		function func(delay time.Duration, cr cpool.Credentials, facade *cpool.ConnPoolFacade)
 	}{
-		//{"exec", execSleep},
+		{"exec", execSleep},
 		{"query", querySleep},
-		//{"queryRow", queryRowSleep},
-		//{"exec and query", func(delay time.Duration, cr cpool.Credentials, pf *cpool.ConnPoolFacade) {
-		//	execSleep(delay, cr, pf)
-		//	querySleep(delay, cr, pf)
-		//}},
+		{"queryRow", queryRowSleep},
+		{"exec and query", func(delay time.Duration, cr cpool.Credentials, pf *cpool.ConnPoolFacade) {
+			execSleep(delay, cr, pf)
+			querySleep(delay, cr, pf)
+		}},
 	}
 	const connectionLimit = 100
 
@@ -193,6 +193,7 @@ func TestStatsOneConnectionExec(t *testing.T) {
 		{"query", querySleepWait},
 		{"queryRow", queryRowSleepWait},
 		{"exec and query", func(delay time.Duration, cr cpool.Credentials, wg *sync.WaitGroup, pf *cpool.ConnPoolFacade) {
+			wg.Add(1)
 			execSleepWait(delay, cr, wg, pf)
 			querySleepWait(delay, cr, wg, pf)
 		}},

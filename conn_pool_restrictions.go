@@ -14,7 +14,7 @@ import "time"
 //// The default max idle connections is currently 2. This may change in
 //// a future release.
 //func (connPool *ConnPool) SetMaxIdleConns(n int) {
-//	connPool.mu.Lock()
+//	connPool.poolFacade.mu.Lock()
 //	if n > 0 {
 //		connPool.maxIdleCount = n
 //	} else {
@@ -33,7 +33,7 @@ import "time"
 //		connPool.freeConn = connPool.freeConn[:maxIdle]
 //	}
 //	connPool.maxIdleClosed += int64(len(closing))
-//	connPool.mu.Unlock()
+//	connPool.poolFacade.mu.Unlock()
 //	for _, c := range closing {
 //		c.Close()
 //	}
@@ -49,13 +49,13 @@ import "time"
 //// If n <= 0, then there is no limit on the number of open connections.
 //// The default is 0 (unlimited).
 //func (connPool *ConnPool) SetMaxOpenConns(n int) {
-//	connPool.mu.Lock()
+//	connPool.poolFacade.mu.Lock()
 //	connPool.maxOpen = n
 //	if n < 0 {
 //		connPool.maxOpen = 0
 //	}
 //	syncMaxIdle := connPool.maxOpen > 0 && connPool.maxIdleConnsLocked() > connPool.maxOpen
-//	connPool.mu.Unlock()
+//	connPool.poolFacade.mu.Unlock()
 //	if syncMaxIdle {
 //		connPool.SetMaxIdleConns(n)
 //	}
@@ -70,7 +70,7 @@ import "time"
 //	if d < 0 {
 //		d = 0
 //	}
-//	connPool.mu.Lock()
+//	connPool.poolFacade.mu.Lock()
 //	// Wake cleaner up when lifetime is shortened.
 //	if d > 0 && d < connPool.maxLifetime && connPool.cleanerCh != nil {
 //		select {
@@ -80,7 +80,7 @@ import "time"
 //	}
 //	connPool.maxLifetime = d
 //	connPool.startCleanerLocked()
-//	connPool.mu.Unlock()
+//	connPool.poolFacade.mu.Unlock()
 //}
 //
 
@@ -93,8 +93,8 @@ func (connPool *ConnPool) SetConnMaxIdleTime(duration time.Duration) {
 	if duration < 0 {
 		duration = 0
 	}
-	connPool.mu.Lock()
-	defer connPool.mu.Unlock()
+	connPool.poolFacade.mu.Lock()
+	defer connPool.poolFacade.mu.Unlock()
 
 	// Wake cleaner up when idle time is shortened.
 	limitExists := 0 < duration

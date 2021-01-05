@@ -68,10 +68,10 @@ func (connPool *ConnPool) prepareDC(ctx context.Context, dc *driverConn, release
 		return nil, err
 	}
 	stmt := &Stmt{
-		db:    connPool,
-		query: query,
-		cg:    cg,
-		cgds:  ds,
+		connPool: connPool,
+		query:    query,
+		cg:       cg,
+		cgds:     ds,
 	}
 
 	// When cg == nil this statement will need to keep track of various

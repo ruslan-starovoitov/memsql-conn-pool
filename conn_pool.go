@@ -5,7 +5,6 @@ import (
 	"cpool/driver"
 	"errors"
 	"log"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -35,7 +34,7 @@ type ConnPool struct {
 	// connections in Stmt.css.
 	numClosed uint64
 
-	mu sync.Mutex // protects following fields
+	//mu sync.Mutex // protects following fields
 	//freeConn []*driverConn
 	freeConn     map[*driverConn]struct{}
 	connRequests map[uint64]chan connCreationResponse
@@ -74,12 +73,12 @@ type ConnPool struct {
 // conn returns a newly-opened or cached *driverConn.
 func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn, error) {
 	log.Print("ConnPool conn")
-	connPool.mu.Lock()
+	connPool.poolFacade.mu.Lock()
 
 	// Check if the context is closed.
 	if connPool.closed {
 		log.Print("ConnPool conn is closed")
-		connPool.mu.Unlock()
+		connPool.poolFacade.mu.Unlock()
 		return nil, errDBClosed
 	} else {
 		log.Print("ConnPool conn is not closed")
@@ -91,7 +90,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		log.Print("ConnPool conn is not expired")
 	case <-ctx.Done():
 		log.Print("ConnPool conn is expired")
-		connPool.mu.Unlock()
+		connPool.poolFacade.mu.Unlock()
 		return nil, ctx.Err()
 	}
 	lifetime := connPool.maxLifetime
@@ -123,11 +122,11 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		// Check if the driver connection is expired.
 		if conn.expired(lifetime) {
 			connPool.maxLifetimeClosed++
-			connPool.mu.Unlock()
+			connPool.poolFacade.mu.Unlock()
 			conn.Close()
 			return nil, driver.ErrBadConn
 		}
-		connPool.mu.Unlock()
+		connPool.poolFacade.mu.Unlock()
 
 		// Reset the session if required.
 		if err := conn.resetSession(ctx); err == driver.ErrBadConn {
@@ -141,7 +140,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		log.Print("ConnPool conn canUseIdleConnection not")
 	}
 
-	connPool.mu.Unlock()
+	connPool.poolFacade.mu.Unlock()
 
 	if !connPool.poolFacade.canAddNewConn() {
 		log.Print("ConnPool conn not canAddNewConn. Вызов ожидания.")
@@ -153,11 +152,11 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 
 		responseChan := make(chan connCreationResponse, 1)
 
-		connPool.mu.Lock()
+		connPool.poolFacade.mu.Lock()
 		reqKey := connPool.nextRequestKeyLocked()
 		//connPool.waitCount++
 		connPool.connRequests[reqKey] = responseChan
-		connPool.mu.Unlock()
+		connPool.poolFacade.mu.Unlock()
 
 		//TODO изолировать
 		connPool.poolFacade.mu.Lock()
@@ -167,9 +166,9 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		//
 		//defer func() {
 		//	log.Println("strange defer")
-		//	connPool.mu.Lock()
+		//	connPool.poolFacade.mu.Lock()
 		//	connPool.waitCount--
-		//	connPool.mu.Unlock()
+		//	connPool.poolFacade.mu.Unlock()
 		//}()
 
 		waitStart := nowFunc()
@@ -180,9 +179,9 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		case <-ctx.Done():
 			// Remove the connection request and ensure no value has been sent
 			// on it after removing.
-			connPool.mu.Lock()
+			connPool.poolFacade.mu.Lock()
 			delete(connPool.connRequests, reqKey)
-			connPool.mu.Unlock()
+			connPool.poolFacade.mu.Unlock()
 
 			atomic.AddInt64(&connPool.waitDuration, int64(time.Since(waitStart)))
 
@@ -210,9 +209,9 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 			// This prioritizes giving a valid connection to a client over the exact connection
 			// lifetime, which could expire exactly after this point anyway.
 			if strategy == cachedOrNewConn && ret.err == nil && ret.conn.expired(lifetime) {
-				connPool.mu.Lock()
+				connPool.poolFacade.mu.Lock()
 				connPool.maxLifetimeClosed++
-				connPool.mu.Unlock()
+				connPool.poolFacade.mu.Unlock()
 				ret.conn.Close()
 				return nil, driver.ErrBadConn
 			}
@@ -247,7 +246,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		return nil, err
 	}
 
-	connPool.mu.Lock()
+	connPool.poolFacade.mu.Lock()
 	dc := &driverConn{
 		connPool:   connPool,
 		createdAt:  nowFunc(),
@@ -256,7 +255,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		inUse:      true,
 	}
 	connPool.addDepLocked(dc, dc)
-	connPool.mu.Unlock()
+	connPool.poolFacade.mu.Unlock()
 
 	log.Print("ConnPool conn success new connection created")
 	return dc, nil
@@ -274,8 +273,8 @@ func (connPool *ConnPool) nextRequestKeyLocked() uint64 {
 // be closed whenever possible (when c is next not in use), unless c is
 // already closed.
 func (connPool *ConnPool) noteUnusedDriverStatement(c *driverConn, ds *driverStmt) {
-	connPool.mu.Lock()
-	defer connPool.mu.Unlock()
+	connPool.poolFacade.mu.Lock()
+	defer connPool.poolFacade.mu.Unlock()
 	if c.inUse {
 		c.onPut = append(c.onPut, func() {
 			ds.Close()
@@ -341,9 +340,9 @@ func (connPool *ConnPool) Conn(ctx context.Context) (*Conn, error) {
 // It is rare to Close a ConnPool, as the ConnPool handle is meant to be
 // long-lived and shared between many goroutines.
 func (connPool *ConnPool) Close() error {
-	connPool.mu.Lock()
+	connPool.poolFacade.mu.Lock()
 	if connPool.closed { // Make ConnPool.Close idempotent
-		connPool.mu.Unlock()
+		connPool.poolFacade.mu.Unlock()
 		return nil
 	}
 	if connPool.cleanerCh != nil {
@@ -360,7 +359,7 @@ func (connPool *ConnPool) Close() error {
 	//for _, req := range connPool.connRequests {
 	//	close(req)
 	//}
-	connPool.mu.Unlock()
+	connPool.poolFacade.mu.Unlock()
 	for _, fn := range fns {
 		err1 := fn()
 		if err1 != nil {
@@ -403,16 +402,16 @@ func (connPool *ConnPool) shortestIdleTimeLocked() time.Duration {
 }
 
 func (connPool *ConnPool) removeConnFromFree(dc *driverConn) bool {
-	connPool.mu.Lock()
+	connPool.poolFacade.mu.Lock()
 	_, ok := connPool.freeConn[dc]
 	delete(connPool.freeConn, dc)
-	connPool.mu.Unlock()
+	connPool.poolFacade.mu.Unlock()
 	return ok
 }
 
 func (connPool *ConnPool) getWaitCount() int {
-	connPool.mu.Lock()
+	connPool.poolFacade.mu.Lock()
 	result := len(connPool.connRequests)
-	connPool.mu.Unlock()
+	connPool.poolFacade.mu.Unlock()
 	return result
 }

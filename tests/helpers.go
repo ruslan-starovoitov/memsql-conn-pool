@@ -72,6 +72,6 @@ func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) (ok bool, duration t
 		return true, time.Since(startTime)
 		// timed out
 	case <-time.After(timeout):
-		return false, time.Since(startTime)
+		return false, 0
 	}
 }

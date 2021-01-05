@@ -43,7 +43,7 @@ var (
 // prepare itself on the new connection automatically.
 type Stmt struct {
 	// Immutable:
-	db        *ConnPool // where we came from
+	connPool  *ConnPool // where we came from
 	query     string    // that created the Stmt
 	stickyErr error     // if non-nil, this error is returned for all operations
 
@@ -52,7 +52,7 @@ type Stmt struct {
 	// If Stmt is prepared on a Tx or Conn then cg is present and will
 	// only ever grab a connection from cg.
 	// If cg is nil then the Stmt must grab an arbitrary connection
-	// from db and determine if it must prepare the stmt again by
+	// from connPool and determine if it must prepare the stmt again by
 	// inspecting css.
 	cg   stmtConnGrabber
 	cgds *driverStmt
@@ -132,19 +132,19 @@ func resultFromStatement(ctx context.Context, ci driver.Conn, ds *driverStmt, ar
 
 // removeClosedStmtLocked removes closed conns in s.css.
 //
-// To avoid lock contention on ConnPool.mu, we do it only when
+// To avoid lock contention on connPool.poolFacade.mu, we do it only when
 // s.connPool.numClosed - s.lastNum is large enough.
 func (s *Stmt) removeClosedStmtLocked() {
 	t := len(s.css)/2 + 1
 	if t > 10 {
 		t = 10
 	}
-	dbClosed := atomic.LoadUint64(&s.db.numClosed)
+	dbClosed := atomic.LoadUint64(&s.connPool.numClosed)
 	if dbClosed-s.lastNumClosed < uint64(t) {
 		return
 	}
 
-	s.db.mu.Lock()
+	s.connPool.poolFacade.mu.Lock()
 	for i := 0; i < len(s.css); i++ {
 		if s.css[i].dc.dbmuClosed {
 			s.css[i] = s.css[len(s.css)-1]
@@ -152,7 +152,7 @@ func (s *Stmt) removeClosedStmtLocked() {
 			i--
 		}
 	}
-	s.db.mu.Unlock()
+	s.connPool.poolFacade.mu.Unlock()
 	s.lastNumClosed = dbClosed
 }
 
@@ -184,7 +184,7 @@ func (s *Stmt) connStmt(ctx context.Context, strategy connReuseStrategy) (dc *dr
 	s.removeClosedStmtLocked()
 	s.mu.Unlock()
 
-	dc, err = s.db.conn(ctx, strategy)
+	dc, err = s.connPool.conn(ctx, strategy)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -255,13 +255,13 @@ func (s *Stmt) QueryContext(ctx context.Context, args ...interface{}) (*Rows, er
 			}
 			// addDep must be added before initContextClose or it could attempt
 			// to removeDep before it has been added.
-			s.db.addDep(s, rows)
+			s.connPool.addDep(s, rows)
 
 			// releaseConn must be set before initContextClose or it could
 			// release the connection before it is set.
 			rows.releaseConn = func(err error) {
 				releaseConn(err)
-				s.db.removeDep(s, rows)
+				s.connPool.removeDep(s, rows)
 			}
 			var txctx context.Context
 			if s.cg != nil {
@@ -344,13 +344,13 @@ func (s *Stmt) Close() error {
 	s.mu.Unlock()
 
 	if s.cg == nil {
-		return s.db.removeDep(s, s)
+		return s.connPool.removeDep(s, s)
 	}
 
 	if s.parentStmt != nil {
 		// If parentStmt is set, we must not close s.txds since it's stored
 		// in the css array of the parentStmt.
-		return s.db.removeDep(s.parentStmt, s)
+		return s.connPool.removeDep(s.parentStmt, s)
 	}
 	return txds.Close()
 }
@@ -360,7 +360,7 @@ func (s *Stmt) finalClose() error {
 	defer s.mu.Unlock()
 	if s.css != nil {
 		for _, v := range s.css {
-			s.db.noteUnusedDriverStatement(v.dc, v.ds)
+			s.connPool.noteUnusedDriverStatement(v.dc, v.ds)
 			v.dc.removeOpenStmt(v.ds)
 		}
 		s.css = nil

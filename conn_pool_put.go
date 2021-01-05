@@ -11,11 +11,8 @@ var putConnHook func(*ConnPool, *driverConn)
 
 // debugGetPut determines whether getConn & putConn calls' stack traces
 // are returned for more verbose crashes.
-//TODO replace with false
-const debugGetPut = true
+const debugGetPut = false
 
-// TODO изучить / кладёт соединение в пулл / вызывает создание новых соединений
-//  вызывается когда соединение соединение было создано, но контекст просрочился
 // putConn adds a connection to the connPool's free pool.
 // err is optionally the last error that occurred on this connection.
 func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) {
@@ -26,11 +23,11 @@ func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) 
 		}
 	}
 
-	connPool.mu.Lock()
+	connPool.poolFacade.mu.Lock()
 
 	if !dc.inUse {
 		log.Println("ConnPool putConn not dc.inUse")
-		connPool.mu.Unlock()
+		connPool.poolFacade.mu.Unlock()
 		if debugGetPut {
 			fmt.Printf("putConn(%v) DUPLICATE was: %s\n\nPREVIOUS was: %s", dc, stack(), connPool.lastPut[dc])
 		}
@@ -63,7 +60,7 @@ func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) 
 		// as closed. Don't decrement the open count here, finalClose will
 		// take care of that.
 		connPool.poolFacade.maybeOpenNewConnections()
-		connPool.mu.Unlock()
+		connPool.poolFacade.mu.Unlock()
 		dc.Close()
 		return
 	}
@@ -73,7 +70,7 @@ func (connPool *ConnPool) putConn(dc *driverConn, err error, resetSession bool) 
 		putConnHook(connPool, dc)
 	}
 	added := connPool.putConnectionConnPoolLocked(dc, nil)
-	connPool.mu.Unlock()
+	connPool.poolFacade.mu.Unlock()
 
 	if !added {
 		log.Println("warning ConnPool putConn connection is not added to free connections")
@@ -171,6 +168,13 @@ func (connPool *ConnPool) tryToSaveConnectionAsIdleLocked(dc *driverConn) bool {
 	}
 
 	connPool.freeConn[dc] = struct{}{}
+
+	if _, ok := connPool.freeConn[dc]; ok {
+		log.Println("connection saved as idle success")
+	} else {
+		panic("can not save connection as idle")
+	}
+
 	connPool.startCleanerLocked()
 	return true
 }

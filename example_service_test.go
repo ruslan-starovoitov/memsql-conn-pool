@@ -17,27 +17,27 @@ package cpool_test
 
 // func Example_openDBService() {
 // 	// Opening a driver typically will not attempt to connect to the database.
-// 	db, err := cpool.Open("driver-name", "database=test1")
+// 	connPool, err := cpool.Open("driver-name", "database=test1")
 // 	if err != nil {
 // 		// This will not be a connection error, but a DSN parse error or
 // 		// another initialization error.
 // 		log.Fatal(err)
 // 	}
-// 	db.SetConnMaxLifetime(0)
-// 	db.SetMaxIdleConns(50)
-// 	db.SetMaxOpenConns(50)
+// 	connPool.SetConnMaxLifetime(0)
+// 	connPool.SetMaxIdleConns(50)
+// 	connPool.SetMaxOpenConns(50)
 
-// 	s := &Service{db: db}
+// 	s := &Service{connPool: connPool}
 
 // 	http.ListenAndServe(":8080", s)
 // }
 
 // type Service struct {
-// 	db *cpool.ConnPool
+// 	connPool *cpool.ConnPool
 // }
 
 // func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-// 	db := s.db
+// 	connPool := s.connPool
 // 	switch r.URL.Path {
 // 	default:
 // 		http.Error(w, "not found", http.StatusNotFound)
@@ -46,7 +46,7 @@ package cpool_test
 // 		ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
 // 		defer cancel()
 
-// 		err := s.db.PingContext(ctx)
+// 		err := s.connPool.PingContext(ctx)
 // 		if err != nil {
 // 			http.Error(w, fmt.Sprintf("connPool down: %v", err), http.StatusFailedDependency)
 // 			return
@@ -62,7 +62,7 @@ package cpool_test
 // 		id := 5
 // 		org := 10
 // 		var name string
-// 		err := db.QueryRowContext(ctx, `
+// 		err := connPool.QueryRowContext(ctx, `
 // select
 // 	p.name
 // from
@@ -94,7 +94,7 @@ package cpool_test
 // 		defer cancel()
 
 // 		var names []string
-// 		rows, err := db.QueryContext(ctx, "select p.name from people as p where p.active = true;")
+// 		rows, err := connPool.QueryContext(ctx, "select p.name from people as p where p.active = true;")
 // 		if err != nil {
 // 			http.Error(w, err.Error(), http.StatusInternalServerError)
 // 			return
@@ -139,7 +139,7 @@ package cpool_test
 // 		defer cancel()
 
 // 		var orderRef = "ABC123"
-// 		tx, err := db.BeginTx(ctx, &cpool.TxOptions{Isolation: cpool.LevelSerializable})
+// 		tx, err := connPool.BeginTx(ctx, &cpool.TxOptions{Isolation: cpool.LevelSerializable})
 // 		_, err = tx.ExecContext(ctx, "stored_proc_name", orderRef)
 
 // 		if err != nil {

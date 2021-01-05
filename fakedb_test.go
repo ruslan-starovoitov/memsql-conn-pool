@@ -303,7 +303,7 @@ func (db *fakeDB) createTable(name string, columnNames, columnTypes []string) er
 	return nil
 }
 
-// must be called with connPool.mu lock held
+// must be called with connPool.poolFacade.mu lock held
 func (db *fakeDB) table(table string) (*table, bool) {
 	if db.tables == nil {
 		return nil, false

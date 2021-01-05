@@ -19,8 +19,8 @@ type finalCloser interface {
 // addDep notes that x now depends on dep, and x's finalClose won't be
 // called until all of x's dependencies are removed with removeDep.
 func (connPool *ConnPool) addDep(x finalCloser, dep interface{}) {
-	connPool.mu.Lock()
-	defer connPool.mu.Unlock()
+	connPool.poolFacade.mu.Lock()
+	defer connPool.poolFacade.mu.Unlock()
 	connPool.addDepLocked(x, dep)
 }
 
@@ -41,9 +41,9 @@ func (connPool *ConnPool) addDepLocked(x finalCloser, dep interface{}) {
 // If x no longer has any dependencies, its finalClose method will be
 // called and its error value will be returned.
 func (connPool *ConnPool) removeDep(x finalCloser, dep interface{}) error {
-	connPool.mu.Lock()
+	connPool.poolFacade.mu.Lock()
 	fn := connPool.removeDepLocked(x, dep)
-	connPool.mu.Unlock()
+	connPool.poolFacade.mu.Unlock()
 	return fn()
 }
 

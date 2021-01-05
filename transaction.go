@@ -271,7 +271,7 @@ func (tx *Tx) StmtContext(ctx context.Context, stmt *Stmt) *Stmt {
 	}
 	defer release(nil)
 
-	if tx.db != stmt.db {
+	if tx.db != stmt.connPool {
 		return &Stmt{stickyErr: errors.New("sql: Tx.Stmt: statement from different database used")}
 	}
 	var si driver.Stmt
@@ -318,8 +318,8 @@ func (tx *Tx) StmtContext(ctx context.Context, stmt *Stmt) *Stmt {
 	}
 
 	txs := &Stmt{
-		db: tx.db,
-		cg: tx,
+		connPool: tx.db,
+		cg:       tx,
 		cgds: &driverStmt{
 			Locker: dc,
 			si:     si,

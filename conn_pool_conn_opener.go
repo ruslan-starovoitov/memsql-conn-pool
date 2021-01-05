@@ -30,8 +30,8 @@ func (o *MyConnPoolConnectionOpener) openNewConnection(ctx context.Context, conn
 	// занимает много времени
 	conn, err := connPool.connector.Connect(ctx)
 
-	connPool.mu.Lock()
-	defer connPool.mu.Unlock()
+	connPool.poolFacade.mu.Lock()
+	defer connPool.poolFacade.mu.Unlock()
 
 	if connPool.closed {
 		if err == nil {
@@ -48,7 +48,7 @@ func (o *MyConnPoolConnectionOpener) openNewConnection(ctx context.Context, conn
 		//TODO почему вызывается с nil?
 		connPool.putConnectionConnPoolLocked(nil, err)
 
-		connPool.mu.Unlock()
+		connPool.poolFacade.mu.Unlock()
 		connPool.poolFacade.maybeOpenNewConnections()
 		return
 	}

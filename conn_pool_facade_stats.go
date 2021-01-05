@@ -37,10 +37,10 @@ func (connPoolFacade *ConnPoolFacade) Stats() PoolFacadeStats {
 		log.Printf("stats iterating through pools index=%v\n", index)
 
 		log.Println("before lock")
-		connPool.mu.Lock()
+		connPool.poolFacade.mu.Lock()
 		log.Println("after lock")
 		numIdle += len(connPool.freeConn)
-		connPool.mu.Unlock()
+		connPool.poolFacade.mu.Unlock()
 		log.Println("after unlock")
 
 	}

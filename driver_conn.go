@@ -25,11 +25,11 @@ type driverConn struct {
 	finalClosed bool // ci.Close has been called
 	openStmt    map[*driverStmt]bool
 
-	// guarded by connPool.mu
+	// guarded by connPool.poolFacade.mu
 	inUse      bool
 	returnedAt time.Time // Time the connection was created or returned.
-	onPut      []func()  // code (with connPool.mu held) run when conn is next returned
-	dbmuClosed bool      // same as closed, but guarded by connPool.mu, for removeClosedStmtLocked
+	onPut      []func()  // code (with connPool.poolFacade.mu held) run when conn is next returned
+	dbmuClosed bool      // same as closed, but guarded by connPool.poolFacade.mu, for removeClosedStmtLocked
 }
 
 //TODO изучить когда вызывается
@@ -129,10 +129,10 @@ func (dc *driverConn) Close() error {
 	dc.Unlock() // not defer; removeDep finalClose calls may need to lock
 
 	// And now updates that require holding dc.mu.Lock.
-	dc.connPool.mu.Lock()
+	dc.connPool.poolFacade.mu.Lock()
 	dc.dbmuClosed = true
 	fn := dc.connPool.removeDepLocked(dc, dc)
-	dc.connPool.mu.Unlock()
+	dc.connPool.poolFacade.mu.Unlock()
 
 	log.Println("driverConn Close end")
 	return fn()
@@ -162,12 +162,12 @@ func (dc *driverConn) finalClose() error {
 		dc.ci = nil
 	})
 
-	//dc.connPool.mu.Lock()
+	//dc.connPool.poolFacade.mu.Lock()
 	//dc.connPool.numOpened--
 	dc.connPool.poolFacade.decrementNumOpened()
 	//TODO попытка открыть новые соединения
 	dc.connPool.poolFacade.maybeOpenNewConnections()
-	//dc.connPool.mu.Unlock()
+	//dc.connPool.poolFacade.mu.Unlock()
 
 	log.Println("warning final close 2")
 

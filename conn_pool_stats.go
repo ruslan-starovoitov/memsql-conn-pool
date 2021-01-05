@@ -28,8 +28,8 @@ type ConnPoolStats struct {
 func (connPool *ConnPool) Stats() ConnPoolStats {
 	wait := atomic.LoadInt64(&connPool.waitDuration)
 
-	connPool.mu.Lock()
-	defer connPool.mu.Unlock()
+	connPool.poolFacade.mu.Lock()
+	defer connPool.poolFacade.mu.Unlock()
 
 	stats := ConnPoolStats{
 		//MaxOpenConnections: connPool.maxOpen,

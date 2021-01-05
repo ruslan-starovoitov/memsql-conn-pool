@@ -26,19 +26,19 @@ func (connPool *ConnPool) connectionCleaner(duration time.Duration) {
 		case <-connPool.cleanerCh: // maxLifetime was changed or connPool was closed.
 		}
 
-		connPool.mu.Lock()
+		connPool.poolFacade.mu.Lock()
 
 		duration = connPool.shortestIdleTimeLocked()
 		if connPool.closed ||
 			//connPool.numOpened == 0 ||
 			duration <= 0 {
 			connPool.cleanerCh = nil
-			connPool.mu.Unlock()
+			connPool.poolFacade.mu.Unlock()
 			return
 		}
 
 		closing := connPool.connectionCleanerRunLocked()
-		connPool.mu.Unlock()
+		connPool.poolFacade.mu.Unlock()
 		for _, c := range closing {
 			c.Close()
 		}

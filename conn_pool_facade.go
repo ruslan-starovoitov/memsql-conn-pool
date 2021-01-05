@@ -200,6 +200,7 @@ func (connPoolFacade *ConnPoolFacade) getNumOfConnRequestsLocked() int {
 	return connPoolFacade.waitCount
 }
 
+//deadlock
 func (connPoolFacade *ConnPoolFacade) getConnPoolsThatHaveRequestedNewConnections(connectionsNum int) []*ConnPool {
 	if connectionsNum == 0 {
 		return nil
@@ -213,6 +214,7 @@ func (connPoolFacade *ConnPoolFacade) getConnPoolsThatHaveRequestedNewConnection
 	log.Printf("len of pools %v", connPoolFacade.pools.Count())
 	//пройтись по пулам
 	for tuple := range connPoolFacade.pools.IterBuffered() {
+		log.Println("getConnPoolsThatHaveRequestedNewConnections")
 		connPool, ok := tuple.Val.(*ConnPool)
 
 		log.Printf("conn pool wait count = %v\n", connPool.getWaitCount())
@@ -222,6 +224,7 @@ func (connPoolFacade *ConnPoolFacade) getConnPoolsThatHaveRequestedNewConnection
 		}
 
 		if connPool.getWaitCount() == 0 {
+			log.Println("getConnPoolsThatHaveRequestedNewConnections  getWaitCount() == 0 ")
 			continue
 		}
 
@@ -234,6 +237,7 @@ func (connPoolFacade *ConnPoolFacade) getConnPoolsThatHaveRequestedNewConnection
 		connectionRemaining -= numOfNewConn
 		log.Printf("connectionRemaining = %v, numOfNewConn = %v\n", connectionRemaining, numOfNewConn)
 		if connectionRemaining == 0 {
+			log.Println("success return ")
 			return slice
 		}
 	}

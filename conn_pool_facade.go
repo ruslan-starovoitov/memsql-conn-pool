@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	lru "github.com/hashicorp/golang-lru"
+	"github.com/sasha-s/go-deadlock"
 	"log"
-	"sync"
 	"time"
 
 	cmap "github.com/orcaman/concurrent-map"
@@ -32,7 +32,7 @@ type ConnPoolFacade struct {
 
 	closed bool
 
-	mu sync.Mutex // protects following fields
+	mu deadlock.Mutex // protects following fields
 	//connRequests map[uint64]connRequest //для запросов на создание новых соединений
 	//nextRequest uint64 // Next key to use in connRequests.
 
@@ -65,7 +65,7 @@ func NewPoolFacade(driverName string, connectionLimit int, idleTimeout time.Dura
 		idleTimeout: idleTimeout,
 		cancel:      cancel,
 		closed:      false,
-		mu:          sync.Mutex{},
+		mu:          deadlock.Mutex{},
 		lruCache:    lruCache,
 		//TODO magic number
 		openerChannel: make(chan *ConnPool, 1000),

@@ -1,9 +1,10 @@
-// Copyright 2011 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
+//// Copyright 2011 The Go Authors. All rights reserved.
+//// Use of this source code is governed by a BSD-style
+//// license that can be found in the LICENSE file.
+//
 package cpool
 
+//
 //
 //import (
 //	"context"
@@ -20,41 +21,41 @@ package cpool
 //	"time"
 //)
 //
-////func init() {
-////	type dbConn struct {
-////		connPool *ConnPool
-////		c  *driverConn
-////	}
-////	freedFrom := make(map[dbConn]string)
-////	var mu sync.Mutex
-////	getFreedFrom := func(c dbConn) string {
-////		mu.Lock()
-////		defer mu.Unlock()
-////		return freedFrom[c]
-////	}
-////	setFreedFrom := func(c dbConn, s string) {
-////		mu.Lock()
-////		defer mu.Unlock()
-////		freedFrom[c] = s
-////	}
-////	putConnHook = func(connPool *ConnPool, c *driverConn) {
-////		idx := -1
-////		for i, v := range connPool.freeConn {
-////			if v == c {
-////				idx = i
-////				break
-////			}
-////		}
-////		if idx >= 0 {
-////			// print before panic, as panic may get lost due to conflicting panic
-////			// (all goroutines asleep) elsewhere, since we might not unlock
-////			// the mutex in freeConn here.
-////			println("double free of conn. conflicts are:\nA) " + getFreedFrom(dbConn{connPool, c}) + "\n\nand\nB) " + stack())
-////			panic("double free of conn.")
-////		}
-////		setFreedFrom(dbConn{connPool, c}, stack())
-////	}
-////}
+//func init() {
+//	type dbConn struct {
+//		connPool *ConnPool
+//		c  *driverConn
+//	}
+//	freedFrom := make(map[dbConn]string)
+//	var mu sync.Mutex
+//	getFreedFrom := func(c dbConn) string {
+//		mu.Lock()
+//		defer mu.Unlock()
+//		return freedFrom[c]
+//	}
+//	setFreedFrom := func(c dbConn, s string) {
+//		mu.Lock()
+//		defer mu.Unlock()
+//		freedFrom[c] = s
+//	}
+//	putConnHook = func(connPool *ConnPool, c *driverConn) {
+//		idx := -1
+//		for i, v := range connPool.freeConn {
+//			if v == c {
+//				idx = i
+//				break
+//			}
+//		}
+//		if idx >= 0 {
+//			// print before panic, as panic may get lost due to conflicting panic
+//			// (all goroutines asleep) elsewhere, since we might not unlock
+//			// the mutex in freeConn here.
+//			println("double free of conn. conflicts are:\nA) " + getFreedFrom(dbConn{connPool, c}) + "\n\nand\nB) " + stack())
+//			panic("double free of conn.")
+//		}
+//		setFreedFrom(dbConn{connPool, c}, stack())
+//	}
+//}
 //
 //const fakeDBName = "foo"
 //
@@ -144,43 +145,43 @@ package cpool
 //	}
 //}
 //
-////func closeDB(t testing.TB, connPool *ConnPool) {
-////	if e := recover(); e != nil {
-////		fmt.Printf("Panic: %v\n", e)
-////		panic(e)
-////	}
-////	defer setHookpostCloseConn(nil)
-////	setHookpostCloseConn(func(_ *fakeConn, err error) {
-////		if err != nil {
-////			t.Errorf("Error closing fakeConn: %v", err)
-////		}
-////	})
-////	connPool.mu.Lock()
-////	for i, dc := range connPool.freeConn {
-////		if n := len(dc.openStmt); n > 0 {
-////			// Just a sanity check. This is legal in
-////			// general, but if we make the tests clean up
-////			// their statements first, then we can safely
-////			// verify this is always zero here, and any
-////			// other value is a leak.
-////			t.Errorf("while closing connPool, freeConn %d/%d had %d open stmts; want 0", i, len(connPool.freeConn), n)
-////		}
-////	}
-////	connPool.mu.Unlock()
-////
-////	err := connPool.Close()
-////	if err != nil {
-////		t.Fatalf("error closing ConnPool: %v", err)
-////	}
-////
-////	var numOpen int
-////	if !waitCondition(5*time.Second, 5*time.Millisecond, func() bool {
-////		numOpen = connPool.numOpenConns()
-////		return numOpen == 0
-////	}) {
-////		t.Fatalf("%d connections still open after closing ConnPool", numOpen)
-////	}
-////}
+//func closeDB(t testing.TB, connPool *ConnPool) {
+//	if e := recover(); e != nil {
+//		fmt.Printf("Panic: %v\n", e)
+//		panic(e)
+//	}
+//	defer setHookpostCloseConn(nil)
+//	setHookpostCloseConn(func(_ *fakeConn, err error) {
+//		if err != nil {
+//			t.Errorf("Error closing fakeConn: %v", err)
+//		}
+//	})
+//	connPool.mu.Lock()
+//	for i, dc := range connPool.freeConn {
+//		if n := len(dc.openStmt); n > 0 {
+//			// Just a sanity check. This is legal in
+//			// general, but if we make the tests clean up
+//			// their statements first, then we can safely
+//			// verify this is always zero here, and any
+//			// other value is a leak.
+//			t.Errorf("while closing connPool, freeConn %d/%d had %d open stmts; want 0", i, len(connPool.freeConn), n)
+//		}
+//	}
+//	connPool.mu.Unlock()
+//
+//	err := connPool.Close()
+//	if err != nil {
+//		t.Fatalf("error closing ConnPool: %v", err)
+//	}
+//
+//	var numOpen int
+//	if !waitCondition(5*time.Second, 5*time.Millisecond, func() bool {
+//		numOpen = connPool.numOpenConns()
+//		return numOpen == 0
+//	}) {
+//		t.Fatalf("%d connections still open after closing ConnPool", numOpen)
+//	}
+//}
 //
 //// numPrepares assumes that connPool has exactly 1 idle conn and returns
 //// its count of calls to Prepare
@@ -222,19 +223,19 @@ package cpool
 //	return connPool.numOpen
 //}
 //
-//// // clearAllConns closes all connections in connPool.
-//// func (connPool *ConnPool) clearAllConns(t *testing.T) {
-//// 	connPool.SetMaxIdleConns(0)
+//// clearAllConns closes all connections in connPool.
+//func (connPool *ConnPool) clearAllConns(t *testing.T) {
+//	connPool.SetMaxIdleConns(0)
 //
-//// 	if g, w := connPool.numFreeConns(), 0; g != w {
-//// 		t.Errorf("free conns = %d; want %d", g, w)
-//// 	}
+//	if g, w := connPool.numFreeConns(), 0; g != w {
+//		t.Errorf("free conns = %d; want %d", g, w)
+//	}
 //
-//// 	if n := connPool.numDepsPollUntil(0, time.Second); n > 0 {
-//// 		t.Errorf("number of dependencies = %d; expected 0", n)
-//// 		connPool.dumpDeps(t)
-//// 	}
-//// }
+//	if n := connPool.numDepsPollUntil(0, time.Second); n > 0 {
+//		t.Errorf("number of dependencies = %d; expected 0", n)
+//		connPool.dumpDeps(t)
+//	}
+//}
 //
 //func (connPool *ConnPool) dumpDeps(t *testing.T) {
 //	for fc := range connPool.dep {
@@ -1184,53 +1185,53 @@ package cpool
 //	}
 //}
 //
-//// func TestParentStmtOutlivesTxStmt(t *testing.T) {
-//// 	connPool := newTestDB(t, "")
-//// 	defer closeDB(t, connPool)
-//// 	exec(t, connPool, "CREATE|t1|name=string,age=int32")
+//func TestParentStmtOutlivesTxStmt(t *testing.T) {
+//	connPool := newTestDB(t, "")
+//	defer closeDB(t, connPool)
+//	exec(t, connPool, "CREATE|t1|name=string,age=int32")
 //
-//// 	// Make sure everything happens on the same connection.
-//// 	connPool.SetMaxOpenConns(1)
+//	// Make sure everything happens on the same connection.
+//	connPool.SetMaxOpenConns(1)
 //
-//// 	prepares0 := numPrepares(t, connPool)
+//	prepares0 := numPrepares(t, connPool)
 //
-//// 	// connPool.Prepare increments numPrepares.
-//// 	stmt, err := connPool.Prepare("INSERT|t1|name=?,age=?")
-//// 	if err != nil {
-//// 		t.Fatalf("Stmt, err = %v, %v", stmt, err)
-//// 	}
-//// 	defer stmt.Close()
-//// 	tx, err := connPool.Begin()
-//// 	if err != nil {
-//// 		t.Fatalf("Begin = %v", err)
-//// 	}
-//// 	txs := tx.Stmt(stmt)
-//// 	if len(stmt.css) != 1 {
-//// 		t.Fatalf("len(stmt.css) = %v; want 1", len(stmt.css))
-//// 	}
-//// 	err = txs.Close()
-//// 	if err != nil {
-//// 		t.Fatalf("txs.Close() = %v", err)
-//// 	}
-//// 	err = tx.Rollback()
-//// 	if err != nil {
-//// 		t.Fatalf("tx.Rollback() = %v", err)
-//// 	}
-//// 	// txs must not be valid.
-//// 	_, err = txs.Exec("Suzan", 30)
-//// 	if err == nil {
-//// 		t.Fatalf("txs.Exec(), expected err")
-//// 	}
-//// 	// Stmt must still be valid.
-//// 	_, err = stmt.Exec("Janina", 25)
-//// 	if err != nil {
-//// 		t.Fatalf("stmt.Exec() = %v", err)
-//// 	}
+//	// connPool.Prepare increments numPrepares.
+//	stmt, err := connPool.Prepare("INSERT|t1|name=?,age=?")
+//	if err != nil {
+//		t.Fatalf("Stmt, err = %v, %v", stmt, err)
+//	}
+//	defer stmt.Close()
+//	tx, err := connPool.Begin()
+//	if err != nil {
+//		t.Fatalf("Begin = %v", err)
+//	}
+//	txs := tx.Stmt(stmt)
+//	if len(stmt.css) != 1 {
+//		t.Fatalf("len(stmt.css) = %v; want 1", len(stmt.css))
+//	}
+//	err = txs.Close()
+//	if err != nil {
+//		t.Fatalf("txs.Close() = %v", err)
+//	}
+//	err = tx.Rollback()
+//	if err != nil {
+//		t.Fatalf("tx.Rollback() = %v", err)
+//	}
+//	// txs must not be valid.
+//	_, err = txs.Exec("Suzan", 30)
+//	if err == nil {
+//		t.Fatalf("txs.Exec(), expected err")
+//	}
+//	// Stmt must still be valid.
+//	_, err = stmt.Exec("Janina", 25)
+//	if err != nil {
+//		t.Fatalf("stmt.Exec() = %v", err)
+//	}
 //
-//// 	if prepares := numPrepares(t, connPool) - prepares0; prepares != 1 {
-//// 		t.Errorf("executed %d Prepare statements; want 1", prepares)
-//// 	}
-//// }
+//	if prepares := numPrepares(t, connPool) - prepares0; prepares != 1 {
+//		t.Errorf("executed %d Prepare statements; want 1", prepares)
+//	}
+//}
 //
 //// Test that tx.Stmt called with a statement already
 //// associated with tx as argument re-prepares the same
@@ -4396,30 +4397,30 @@ package cpool
 //	}
 //}
 //
-//// func BenchmarkManyConcurrentQueries(b *testing.B) {
-//// 	b.ReportAllocs()
-//// 	// To see lock contention in Go 1.4, 16~ cores and 128~ goroutines are required.
-//// 	const parallelism = 16
+//func BenchmarkManyConcurrentQueries(b *testing.B) {
+//	b.ReportAllocs()
+//	// To see lock contention in Go 1.4, 16~ cores and 128~ goroutines are required.
+//	const parallelism = 16
 //
-//// 	connPool := newTestDB(b, "magicquery")
-//// 	defer closeDB(b, connPool)
-//// 	connPool.SetMaxIdleConns(runtime.GOMAXPROCS(0) * parallelism)
+//	connPool := newTestDB(b, "magicquery")
+//	defer closeDB(b, connPool)
+//	connPool.SetMaxIdleConns(runtime.GOMAXPROCS(0) * parallelism)
 //
-//// 	stmt, err := connPool.Prepare("SELECT|magicquery|op|op=?,millis=?")
-//// 	if err != nil {
-//// 		b.Fatal(err)
-//// 	}
-//// 	defer stmt.Close()
+//	stmt, err := connPool.Prepare("SELECT|magicquery|op|op=?,millis=?")
+//	if err != nil {
+//		b.Fatal(err)
+//	}
+//	defer stmt.Close()
 //
-//// 	b.SetParallelism(parallelism)
-//// 	b.RunParallel(func(pb *testing.PB) {
-//// 		for pb.Next() {
-//// 			rows, err := stmt.Query("sleep", 1)
-//// 			if err != nil {
-//// 				b.Error(err)
-//// 				return
-//// 			}
-//// 			rows.Close()
-//// 		}
-//// 	})
-//// }
+//	b.SetParallelism(parallelism)
+//	b.RunParallel(func(pb *testing.PB) {
+//		for pb.Next() {
+//			rows, err := stmt.Query("sleep", 1)
+//			if err != nil {
+//				b.Error(err)
+//				return
+//			}
+//			rows.Close()
+//		}
+//	})
+//}

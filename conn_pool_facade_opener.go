@@ -37,9 +37,13 @@ func (connPoolFacade *ConnPoolFacade) maybeOpenNewConnections() {
 	connPoolFacade.mu.Lock()
 	defer connPoolFacade.mu.Unlock()
 
+	log.Println("maybeOpenNewConnections 1")
+
 	//how many connections is needed to open?
 	numConnectionsRequested := connPoolFacade.getNumOfConnRequestsLocked()
 	numCanOpenConnections := connPoolFacade.getNumCanOpenConnectionsLocked()
+
+	log.Println("maybeOpenNewConnections 2")
 
 	//try to close idle connections if needed
 	isNeedToCloseIdleConns := numCanOpenConnections < numConnectionsRequested
@@ -50,12 +54,17 @@ func (connPoolFacade *ConnPoolFacade) maybeOpenNewConnections() {
 		numCanOpenConnections = connPoolFacade.getNumCanOpenConnectionsLocked()
 	}
 
+	log.Println("maybeOpenNewConnections 3")
+
 	//calculate max num of connections to open
 	numOfNewConnections := min(numConnectionsRequested, numCanOpenConnections)
 	connPoolsToCreateNewConnections := connPoolFacade.getConnPoolsThatHaveRequestedNewConnections(numOfNewConnections)
 
+	log.Println("maybeOpenNewConnections 4")
 	//open new connections
 	connPoolFacade.giveCommandToOpenNewConnections(connPoolsToCreateNewConnections)
+
+	log.Println("maybeOpenNewConnections 5")
 }
 
 //TODO даёт команды открыть соединение для каждого из пулов

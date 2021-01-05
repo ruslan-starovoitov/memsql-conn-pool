@@ -16,7 +16,8 @@ type ConnPoolStats struct {
 	Idle            int // The number of idle connections.
 
 	// Counters
-	WaitCount         int64         // The total number of connections waited for.
+	//WaitCount         int64         // The total number of connections waited for.
+	WaitCount         int           // The total number of connections waited for.
 	WaitDuration      time.Duration // The total time blocked waiting for a new connection.
 	MaxIdleClosed     int64         // The total number of connections closed due to SetMaxIdleConns.
 	MaxIdleTimeClosed int64         // The total number of connections closed due to SetConnMaxIdleTime.

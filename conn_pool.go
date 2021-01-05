@@ -458,7 +458,10 @@ func (connPool *ConnPool) shortestIdleTimeLocked() time.Duration {
 }
 
 func (connPool *ConnPool) removeConnFromFree(dc *driverConn) bool {
+	connPool.mu.Lock()
 	_, ok := connPool.freeConn[dc]
+	delete(connPool.freeConn, dc)
+	connPool.mu.Unlock()
 	return ok
 }
 

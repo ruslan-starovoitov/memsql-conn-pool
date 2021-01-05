@@ -157,12 +157,12 @@ func (dc *driverConn) finalClose() error {
 		dc.ci = nil
 	})
 
-	dc.connPool.mu.Lock()
+	//dc.connPool.mu.Lock()
 	//dc.connPool.numOpened--
 	dc.connPool.poolFacade.decrementNumOpened()
 	//TODO попытка открыть новые соединения
 	dc.connPool.poolFacade.maybeOpenNewConnections()
-	dc.connPool.mu.Unlock()
+	//dc.connPool.mu.Unlock()
 
 	atomic.AddUint64(&dc.connPool.numClosed, 1)
 	return err

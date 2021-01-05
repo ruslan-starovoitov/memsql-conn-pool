@@ -10,29 +10,35 @@ func (connPoolFacade *ConnPoolFacade) getNumCanOpenConnectionsLocked() int {
 
 // TODO Даёт команду открыть новые соединения если нужно.
 //  Если лимит превышен, то попытается закрыть idle соединения.
+// 	вызывать без локов
 // If there are connRequests and the connection limit hasn't been reached,
 // then tell the connectionOpener to open new connections.
 func (connPoolFacade *ConnPoolFacade) maybeOpenNewConnections() {
-	log.Println("maybeOpenNewConnections")
+	log.Println("connPoolFacade maybeOpenNewConnections")
 
 	connPoolFacade.mu.Lock()
 	defer connPoolFacade.mu.Unlock()
 
-	log.Println("maybeOpenNewConnections 1")
+	log.Println("connPoolFacade maybeOpenNewConnections 1")
 
 	//how many connections is needed to open?
 	numConnectionsRequested := connPoolFacade.getNumOfConnRequestsLocked()
 	numCanOpenConnections := connPoolFacade.getNumCanOpenConnectionsLocked()
 
-	log.Println("maybeOpenNewConnections 2")
+	log.Println("connPoolFacade maybeOpenNewConnections 2")
 
 	//try to close idle connections if needed
 	isNeedToCloseIdleConns := numCanOpenConnections < numConnectionsRequested
+
+	log.Printf("connPoolFacade maybeOpenNewConnections isNeedToCloseIdleConns %v\n", isNeedToCloseIdleConns)
 	if isNeedToCloseIdleConns {
 		numIdleConnToClose := numConnectionsRequested - numCanOpenConnections
-		connPoolFacade.maybeCloseIdleConn(numIdleConnToClose)
+		log.Printf("connPoolFacade maybeOpenNewConnections numIdleConnToClose %v\n", numIdleConnToClose)
+		connPoolFacade.maybeCloseIdleConnLocked(numIdleConnToClose)
 		//update num of can open
 		numCanOpenConnections = connPoolFacade.getNumCanOpenConnectionsLocked()
+
+		log.Printf("connPoolFacade maybeOpenNewConnections updated numCanOpenConnections %v\n", numIdleConnToClose)
 	}
 
 	log.Println("maybeOpenNewConnections 3")

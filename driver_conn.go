@@ -117,8 +117,10 @@ func (dc *driverConn) closeDBLocked() func() error {
 }
 
 func (dc *driverConn) Close() error {
-	log.Println("driverConn) Close start")
+	log.Println("driverConn Close start")
 	dc.Lock()
+
+	dc.connPool.poolFacade.removeConnFromLru(dc)
 	if dc.closed {
 		dc.Unlock()
 		return errors.New("sql: duplicate driverConn close")
@@ -132,7 +134,7 @@ func (dc *driverConn) Close() error {
 	fn := dc.connPool.removeDepLocked(dc, dc)
 	dc.connPool.mu.Unlock()
 
-	log.Println("driverConn) Close end")
+	log.Println("driverConn Close end")
 	return fn()
 }
 

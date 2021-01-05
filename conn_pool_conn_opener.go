@@ -18,7 +18,7 @@ func NewMyConnPoolConnectionOpener() *MyConnPoolConnectionOpener {
 //TODO метод создаёт новое соединение и вызывает p
 // Open one new connection
 func (o *MyConnPoolConnectionOpener) openNewConnection(ctx context.Context, connPool *ConnPool) {
-	log.Println("ConnPool openNewConnection")
+	log.Println("important openNewConnection")
 
 	// maybeOpenNewConnections has already executed connPool.numOpened++ before it sent
 	// on connPool.openerCh. This function must execute connPool.numOpened-- if the
@@ -61,10 +61,10 @@ func (o *MyConnPoolConnectionOpener) openNewConnection(ctx context.Context, conn
 	}
 
 	if connPool.putConnectionConnPoolLocked(dc, err) {
-		log.Println("ConnPool openNewConnection putConnectionConnPoolLocked success")
+		log.Println("important openNewConnection putConnectionConnPoolLocked success")
 		connPool.addDepLocked(dc, dc)
 	} else {
-		log.Println("ConnPool openNewConnection putConnectionConnPoolLocked failure")
+		log.Println("important openNewConnection putConnectionConnPoolLocked failure")
 		//connPool.numOpened--
 		connPool.poolFacade.decrementNumOpened()
 		conn.Close()

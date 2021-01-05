@@ -2,7 +2,8 @@ package cpool
 
 import "log"
 
-func (connPoolFacade *ConnPoolFacade) maybeCloseIdleConn(numIdleConnToClose int) {
+func (connPoolFacade *ConnPoolFacade) maybeCloseIdleConnLocked(numIdleConnToClose int) {
+	log.Println("maybeCloseIdleConnLocked")
 	numOfIdleConn := connPoolFacade.lruCache.Len()
 	log.Printf("num of idle conns = %v\n", numOfIdleConn)
 	if numOfIdleConn < numIdleConnToClose {

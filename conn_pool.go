@@ -144,7 +144,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 	connPool.mu.Unlock()
 
 	if !connPool.poolFacade.canAddNewConn() {
-		log.Print("ConnPool conn !canAddNewConn")
+		log.Print("ConnPool conn not canAddNewConn. Вызов ожидания.")
 		// TODO try to remove idle connection from another connection pool and
 		//  wait for free connection
 
@@ -228,18 +228,18 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 			return ret.conn, ret.err
 		}
 	} else {
-		log.Print("ConnPool conn not canAddNewConn")
+		log.Print("ConnPool conn canAddNewConn")
 	}
 
 	connPool.poolFacade.incrementNumOpened() // optimistically
 	//connPool.numOpened++
 
 	//Создание нового соединения
-	log.Print("ConnPool conn creating a new pool")
+	log.Print("ConnPool conn creating a new connection")
 	ci, err := connPool.connector.Connect(ctx)
 
 	if err != nil {
-		log.Printf("ConnPool conn creating a new pool with error %s", err.Error())
+		log.Printf("error ConnPool conn creating a new pool with error %s", err.Error())
 		connPool.poolFacade.decrementNumOpened()
 		//connPool.numOpened-- // correct for earlier optimism
 		//TODO попытка открыть новые соединения
@@ -258,6 +258,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 	connPool.addDepLocked(dc, dc)
 	connPool.mu.Unlock()
 
+	log.Print("ConnPool conn success new connection created")
 	return dc, nil
 }
 

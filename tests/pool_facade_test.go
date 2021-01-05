@@ -370,6 +370,7 @@ func TestCreatePoolWithDifferentConnectionLimits(t *testing.T) {
 //при переиспользовании возвращается канал по нужным логину и паролю
 func TestConnectToDesiredDatabaseReuse(t *testing.T) {
 	t.Parallel()
+	log.Println("TEST START")
 
 	// Create pool
 	connectionLimit := 1
@@ -378,24 +379,33 @@ func TestConnectToDesiredDatabaseReuse(t *testing.T) {
 	defer poolFacade.Close()
 
 	for _, cr := range credentials {
+		log.Printf("credentials %+v\n", cr)
 		for i := 0; i < numRepetitions; i++ {
 			// Check database name
+			log.Println("111111111111111111111111111111111111111111")
 			row, err := poolFacade.QueryRow(cr, "SELECT DATABASE();")
 			require.NoError(t, err, "connection error")
+			log.Println("111111111111111111111111111111111111111111")
 
+			log.Println("22222222222222222222222222222222222222222")
 			var currentDB string
 			err = row.Scan(&currentDB)
 			require.NoError(t, err, "QueryRow Scan unexpectedly failed")
 			require.Equal(t, cr.Database, currentDB, "Did not connect to specified database ")
+			log.Println("22222222222222222222222222222222222222222")
 
+			log.Println("3333333333333333333333333333333333333333")
 			// Check user name
 			row, err = poolFacade.QueryRow(cr, "select current_user")
 			require.NoError(t, err, "connection error")
+			log.Println("3333333333333333333333333333333333333333")
 
+			log.Println("44444444444444444444444444444444444444444")
 			var user string
 			err = row.Scan(&user)
 			require.NoError(t, err, "QueryRow Scan unexpectedly failed")
 			require.Equal(t, cr.Username+"@%", user, "Did not connect as specified user")
+			log.Println("44444444444444444444444444444444444444444")
 		}
 	}
 }

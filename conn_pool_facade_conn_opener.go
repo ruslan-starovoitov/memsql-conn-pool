@@ -24,10 +24,11 @@ func (m *MyConnPoolFacadeConnOpener) startCreatingConnections(ctx context.Contex
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("ConnPoolFacade connectionOpener ctx Done")
+			log.Println("ConnPoolFacade connectionOpener ctx Done.")
 			return
 		//received a command to open a connection
 		case connPool := <-connPoolFacade.openerChannel:
+			log.Println("important received a command to open a connection")
 			stats := connPoolFacade.Stats()
 			log.Printf("ConnPoolFacade connectionOpener openerChannel stats = %v\n", stats)
 			m.connOpener.openNewConnection(ctx, connPool)

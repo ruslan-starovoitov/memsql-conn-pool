@@ -63,10 +63,12 @@ func (connPool *ConnPool) removeDepLocked(x finalCloser, dep interface{}) func()
 		panic(fmt.Sprintf("unpaired removeDep: no %T dep on %T", dep, x))
 	case 0:
 		// No more dependencies.
+		log.Println("removeDepLocked No more dependencies")
 		delete(connPool.dep, x)
 		return x.finalClose
 	default:
 		// Dependencies remain.
+		log.Println("removeDepLocked Dependencies remain")
 		return func() error { return nil }
 	}
 }

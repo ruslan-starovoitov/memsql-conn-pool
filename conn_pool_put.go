@@ -103,10 +103,11 @@ func (connPool *ConnPool) putConnectionConnPoolLocked(dc *driverConn, err error)
 		return false
 	}
 
-	if connPool.poolFacade.isConnLimitExceeded() {
-		log.Println("connPool putConnectionConnPoolLocked isConnLimitExceeded")
-		return false
-	}
+	//TODO опасно
+	//if !connPool.poolFacade.canAddNewConn() {
+	//	log.Println("warning connPool putConnectionConnPoolLocked canAddNewConn")
+	//	return false
+	//}
 
 	if connPool.isFreeConnectionsNeededLocked() {
 		return connPool.returnConnectionOnRequestLocked(dc, err)
@@ -117,7 +118,13 @@ func (connPool *ConnPool) putConnectionConnPoolLocked(dc *driverConn, err error)
 }
 
 func (connPool *ConnPool) isFreeConnectionsNeededLocked() bool {
-	return 0 < connPool.waitCount
+	//if connPool.waitCount != len(connPool.connRequests){
+	//	str := fmt.Sprintf("connPool.waitCount is %v connRequests is %v", connPool.waitCount, len(connPool.connRequests))
+	//	panic(str)
+	//}
+
+	//return 0 < connPool.waitCount
+	return 0 < len(connPool.connRequests)
 }
 
 func (connPool *ConnPool) returnConnectionOnRequestLocked(dc *driverConn, err error) bool {

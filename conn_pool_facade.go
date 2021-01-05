@@ -183,10 +183,10 @@ func (connPoolFacade *ConnPoolFacade) getOrCreateConnPool(credentials Credential
 	return nil, unableToGetPool
 }
 
-func (connPoolFacade *ConnPoolFacade) isConnLimitExceeded() bool {
+func (connPoolFacade *ConnPoolFacade) canAddNewConn() bool {
 	connPoolFacade.mu.Lock()
-	result := connPoolFacade.totalMax < connPoolFacade.numOpened
-	log.Printf("ConnPoolFacade isConnLimitExceeded %v, limit = %v, numOpened =   %v \n", result, connPoolFacade.totalMax, connPoolFacade.numOpened)
+	result := connPoolFacade.numOpened < connPoolFacade.totalMax
+	log.Printf("ConnPoolFacade canAddNewConn %v, limit = %v, numOpened =   %v \n", result, connPoolFacade.totalMax, connPoolFacade.numOpened)
 	connPoolFacade.mu.Unlock()
 	return result
 }
@@ -213,17 +213,19 @@ func (connPoolFacade *ConnPoolFacade) getConnPoolsThatHaveRequestedNewConnection
 	//пройтись по пулам
 	for tuple := range connPoolFacade.pools.IterBuffered() {
 		connPool, ok := tuple.Val.(*ConnPool)
-		log.Printf("conn pool wait count = %v\n", connPool.waitCount)
+
+		log.Printf("conn pool wait count = %v\n", connPool.getWaitCount())
 
 		if !ok {
 			panic("В словаре пулов лежит структура неизвестного типа.")
 		}
 
-		if connPool.waitCount == 0 {
+		if connPool.getWaitCount() == 0 {
 			continue
 		}
 
-		numOfNewConn := min(connPool.waitCount, connectionRemaining)
+		numOfNewConn := min(connPool.getWaitCount(), connectionRemaining)
+
 		for i := 0; i < numOfNewConn; i++ {
 			slice = append(slice, connPool)
 		}

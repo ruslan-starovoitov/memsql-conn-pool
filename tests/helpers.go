@@ -59,11 +59,10 @@ func queryRowSleep(delay time.Duration, credentials cpool.Credentials, poolFacad
 // Если выполнение не закончилось за timeout, то вернет false
 func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) (ok bool, duration time.Duration) {
 	c := make(chan struct{})
-	function := func() {
+	go func() {
 		defer close(c)
 		wg.Wait()
-	}
-	go function()
+	}()
 
 	startTime := time.Now()
 

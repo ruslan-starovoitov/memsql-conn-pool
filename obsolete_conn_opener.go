@@ -1,12 +1,12 @@
 package cpool
 
-// TODO заменил глобальным maybeOpenNewConnectionsLocked в poolFacade
+// TODO заменил глобальным maybeOpenNewConnections в poolFacade
 // TODO просит создать запрошеное кол-во соединений у другой горутины
 // TODO откуда вызывается?
 // Assumes connPool.mu is locked.
 // If there are connRequests and the connection limit hasn't been reached,
 // then tell the connectionOpener to open new connections.
-//func (connPool *ConnPool) maybeOpenNewConnectionsLocked() {
+//func (connPool *ConnPool) maybeOpenNewConnections() {
 //	numRequests := len(connPool.connRequests)
 //	if connPool.maxOpen > 0 {
 //		numCanOpen := connPool.maxOpen - connPool.numOpened

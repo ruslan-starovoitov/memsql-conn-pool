@@ -60,7 +60,7 @@ type ConnPool struct {
 
 	cleanerCh chan struct{} //TODO что это maxLifetime was changed or connPool was closed.
 	//waitCount         int64         // Total number of connections waited for.
-	waitCount         int   // Total number of connections waited for.
+	//waitCount         int   // Total number of connections waited for.
 	maxIdleClosed     int64 // Total number of connections closed due to idle count.
 	maxIdleTimeClosed int64 // Total number of connections closed due to idle time.
 	maxLifetimeClosed int64 // Total number of connections closed due to max connection lifetime limit.
@@ -100,6 +100,8 @@ func (connPool *ConnPool) openNewConnection(ctx context.Context) {
 		connPool.poolFacade.decrementNumOpened()
 		//TODO почему вызывается с nil?
 		connPool.putConnectionConnPoolLocked(nil, err)
+
+		connPool.mu.Unlock()
 		connPool.poolFacade.maybeOpenNewConnections()
 		return
 	}
@@ -197,8 +199,8 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 
 	connPool.mu.Unlock()
 
-	if connPool.poolFacade.isConnLimitExceeded() {
-		log.Print("ConnPool conn isConnLimitExceeded")
+	if !connPool.poolFacade.canAddNewConn() {
+		log.Print("ConnPool conn !canAddNewConn")
 		// TODO try to remove idle connection from another connection pool and
 		//  wait for free connection
 
@@ -206,25 +208,25 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		// connectionOpener doesn't block while waiting for the responseChan to be read.
 
 		responseChan := make(chan connCreationResponse, 1)
-		reqKey := connPool.nextRequestKeyLocked()
 
+		connPool.mu.Lock()
+		reqKey := connPool.nextRequestKeyLocked()
+		//connPool.waitCount++
 		connPool.connRequests[reqKey] = responseChan
+		connPool.mu.Unlock()
 
 		//TODO изолировать
 		connPool.poolFacade.mu.Lock()
 		connPool.poolFacade.waitCount++
 		connPool.poolFacade.mu.Unlock()
 
-		connPool.mu.Lock()
-		connPool.waitCount++
-		connPool.mu.Unlock()
-
-		defer func() {
-			log.Println("strange defer")
-			connPool.mu.Lock()
-			connPool.waitCount--
-			connPool.mu.Unlock()
-		}()
+		//
+		//defer func() {
+		//	log.Println("strange defer")
+		//	connPool.mu.Lock()
+		//	connPool.waitCount--
+		//	connPool.mu.Unlock()
+		//}()
 
 		waitStart := nowFunc()
 
@@ -234,9 +236,9 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 		case <-ctx.Done():
 			// Remove the connection request and ensure no value has been sent
 			// on it after removing.
-			connPool.poolFacade.mu.Lock()
+			connPool.mu.Lock()
 			delete(connPool.connRequests, reqKey)
-			connPool.poolFacade.mu.Unlock()
+			connPool.mu.Unlock()
 
 			atomic.AddInt64(&connPool.waitDuration, int64(time.Since(waitStart)))
 
@@ -282,7 +284,7 @@ func (connPool *ConnPool) conn(ctx context.Context, strategy connReuseStrategy) 
 			return ret.conn, ret.err
 		}
 	} else {
-		log.Print("ConnPool conn not isConnLimitExceeded")
+		log.Print("ConnPool conn not canAddNewConn")
 	}
 
 	connPool.poolFacade.incrementNumOpened() // optimistically
@@ -458,4 +460,11 @@ func (connPool *ConnPool) shortestIdleTimeLocked() time.Duration {
 func (connPool *ConnPool) removeConnFromFree(dc *driverConn) bool {
 	_, ok := connPool.freeConn[dc]
 	return ok
+}
+
+func (connPool *ConnPool) getWaitCount() int {
+	connPool.mu.Lock()
+	result := len(connPool.connRequests)
+	connPool.mu.Unlock()
+	return result
 }

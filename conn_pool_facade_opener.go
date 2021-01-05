@@ -1,27 +1,8 @@
 package cpool
 
 import (
-	"context"
 	"log"
 )
-
-//TODO слушает команды на создание новых соединений
-//Runs in a separate goroutine, opens new connections when requested.
-func (connPoolFacade *ConnPoolFacade) connectionOpener(ctx context.Context) {
-	//ждём пока контекст закроется или попросят открыть новое соединение
-	for {
-		select {
-		case <-ctx.Done():
-			log.Println("ConnPoolFacade connectionOpener ctx Done")
-			return
-		//received a command to open a connection
-		case connPool := <-connPoolFacade.openerChannel:
-			stats := connPoolFacade.Stats()
-			log.Printf("ConnPoolFacade connectionOpener openerChannel stats = %v\n", stats)
-			connPool.openNewConnection(ctx)
-		}
-	}
-}
 
 func (connPoolFacade *ConnPoolFacade) getNumCanOpenConnectionsLocked() int {
 	return connPoolFacade.totalMax - connPoolFacade.numOpened

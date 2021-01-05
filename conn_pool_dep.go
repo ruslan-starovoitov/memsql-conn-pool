@@ -1,6 +1,9 @@
 package cpool
 
-import "fmt"
+import (
+	"fmt"
+	"log"
+)
 
 // depSet is a finalCloser's outstanding dependencies
 type depSet map[interface{}]bool // set of true bools
@@ -45,7 +48,7 @@ func (connPool *ConnPool) removeDep(x finalCloser, dep interface{}) error {
 }
 
 func (connPool *ConnPool) removeDepLocked(x finalCloser, dep interface{}) func() error {
-
+	log.Println("removeDepLocked start")
 	xdep, ok := connPool.dep[x]
 	if !ok {
 		panic(fmt.Sprintf("unpaired removeDep: no deps for %T", x))

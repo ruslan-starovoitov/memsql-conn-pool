@@ -117,6 +117,7 @@ func (dc *driverConn) closeDBLocked() func() error {
 }
 
 func (dc *driverConn) Close() error {
+	log.Println("driverConn) Close start")
 	dc.Lock()
 	if dc.closed {
 		dc.Unlock()
@@ -130,6 +131,8 @@ func (dc *driverConn) Close() error {
 	dc.dbmuClosed = true
 	fn := dc.connPool.removeDepLocked(dc, dc)
 	dc.connPool.mu.Unlock()
+
+	log.Println("driverConn) Close end")
 	return fn()
 }
 
@@ -164,6 +167,9 @@ func (dc *driverConn) finalClose() error {
 	dc.connPool.poolFacade.maybeOpenNewConnections()
 	//dc.connPool.mu.Unlock()
 
+	log.Println("warning final close 2")
+
 	atomic.AddUint64(&dc.connPool.numClosed, 1)
+	log.Println("warning final close 3")
 	return err
 }

@@ -68,62 +68,6 @@ type ConnPool struct {
 	stop func() // stop cancels the connection opener.
 }
 
-//TODO метод создаёт новое соединение и вызывает put
-// Open one new connection
-func (connPool *ConnPool) openNewConnection(ctx context.Context) {
-	log.Println("ConnPool openNewConnection")
-
-	// maybeOpenNewConnections has already executed connPool.numOpened++ before it sent
-	// on connPool.openerCh. This function must execute connPool.numOpened-- if the
-	// connection fails or is closed before returning.
-
-	//TODO вызов внутренней функции драйвера mysql
-	// внутри происходит авторизация
-	// это создание нового соединения
-	// занимает много времени
-	conn, err := connPool.connector.Connect(ctx)
-
-	connPool.mu.Lock()
-	defer connPool.mu.Unlock()
-
-	if connPool.closed {
-		if err == nil {
-			conn.Close()
-		}
-		//connPool.numOpened--
-		connPool.poolFacade.decrementNumOpened()
-		return
-	}
-
-	if err != nil {
-		//connPool.numOpened--
-		connPool.poolFacade.decrementNumOpened()
-		//TODO почему вызывается с nil?
-		connPool.putConnectionConnPoolLocked(nil, err)
-
-		connPool.mu.Unlock()
-		connPool.poolFacade.maybeOpenNewConnections()
-		return
-	}
-
-	dc := &driverConn{
-		connPool:   connPool,
-		createdAt:  nowFunc(),
-		returnedAt: nowFunc(),
-		ci:         conn,
-	}
-
-	if connPool.putConnectionConnPoolLocked(dc, err) {
-		log.Println("ConnPool openNewConnection putConnectionConnPoolLocked success")
-		connPool.addDepLocked(dc, dc)
-	} else {
-		log.Println("ConnPool openNewConnection putConnectionConnPoolLocked failure")
-		//connPool.numOpened--
-		connPool.poolFacade.decrementNumOpened()
-		conn.Close()
-	}
-}
-
 //TODO если можно достёт соединение из кеша
 //     если можно создаёт новое соединение
 //    		иначе делает запрос на получение соединения

@@ -71,8 +71,9 @@ func NewPoolFacade(driverName string, connectionLimit int, idleTimeout time.Dura
 		openerChannel: make(chan *ConnPool, 1000),
 	}
 
-	//TODO запуск создания новых соединений
-	go poolFacade.connectionOpener(ctx)
+	poolConnOpener := NewMyConnPoolConnectionOpener()
+	poolFacadeConnOpener := NewMyConnPoolFacadeConnOpener(poolConnOpener)
+	go poolFacadeConnOpener.startCreatingConnections(ctx, &poolFacade)
 	return &poolFacade
 }
 
